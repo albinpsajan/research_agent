@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 import feedparser
 
@@ -15,7 +14,7 @@ from src.research.http_client import ResearchHttpClient
 logger = get_logger("research.web")
 
 
-def _parse_feed_date(entry: dict) -> Optional[datetime]:
+def _parse_feed_date(entry: dict) -> datetime | None:
     parsed = entry.get("published_parsed") or entry.get("updated_parsed")
     if parsed:
         try:
@@ -31,7 +30,7 @@ class RSSConnector:
     name = "rss"
     reliability = 0.62
 
-    def __init__(self, http: Optional[ResearchHttpClient] = None) -> None:
+    def __init__(self, http: ResearchHttpClient | None = None) -> None:
         self.http = http or ResearchHttpClient()
 
     def search(self, query: str, limit: int = 8) -> list[SearchResult]:
@@ -76,7 +75,7 @@ class WikipediaConnector:
     name = "wikipedia"
     reliability = 0.66
 
-    def __init__(self, http: Optional[ResearchHttpClient] = None) -> None:
+    def __init__(self, http: ResearchHttpClient | None = None) -> None:
         self.http = http or ResearchHttpClient()
 
     def search(self, query: str, limit: int = 5) -> list[SearchResult]:
@@ -124,7 +123,7 @@ class HackerNewsConnector:
     name = "hackernews"
     reliability = 0.55
 
-    def __init__(self, http: Optional[ResearchHttpClient] = None) -> None:
+    def __init__(self, http: ResearchHttpClient | None = None) -> None:
         self.http = http or ResearchHttpClient()
 
     def search(self, query: str, limit: int = 8) -> list[SearchResult]:
@@ -148,7 +147,10 @@ class HackerNewsConnector:
             raise
         results: list[SearchResult] = []
         for hit in payload.get("hits", []):
-            url = hit.get("url") or f"https://news.ycombinator.com/item?id={hit.get('objectID')}"
+            url = (
+                hit.get("url")
+                or f"https://news.ycombinator.com/item?id={hit.get('objectID')}"
+            )
             results.append(
                 SearchResult(
                     title=hit.get("title") or "Hacker News story",
@@ -159,11 +161,14 @@ class HackerNewsConnector:
                     ),
                     source_type="hackernews",
                     published_at=(
-                        datetime.fromisoformat(hit["created_at"].replace("Z", "+00:00"))
+                        datetime.fromisoformat(hit["created_at"])
                         if hit.get("created_at")
                         else None
                     ),
-                    metadata={"hn_id": hit.get("objectID"), "points": hit.get("points", 0)},
+                    metadata={
+                        "hn_id": hit.get("objectID"),
+                        "points": hit.get("points", 0),
+                    },
                     reliability=self.reliability,
                 )
             )
@@ -176,7 +181,7 @@ class DuckDuckGoConnector:
     name = "duckduckgo"
     reliability = 0.5
 
-    def __init__(self, http: Optional[ResearchHttpClient] = None) -> None:
+    def __init__(self, http: ResearchHttpClient | None = None) -> None:
         self.http = http or ResearchHttpClient()
 
     def search(self, query: str, limit: int = 5) -> list[SearchResult]:

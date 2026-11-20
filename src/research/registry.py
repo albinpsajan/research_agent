@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable, Optional
 
 from config.logging_config import get_logger
 from config.settings import get_settings
@@ -45,7 +45,7 @@ class SearchBundle:
     errors: dict[str, str] = field(default_factory=dict)
     queries: list[str] = field(default_factory=list)
 
-    def extend(self, other: "SearchBundle") -> None:
+    def extend(self, other: SearchBundle) -> None:
         self.results.extend(other.results)
         self.errors.update(other.errors)
         self.queries.extend(other.queries)
@@ -76,8 +76,8 @@ class ConnectorRegistry:
 
     def __init__(
         self,
-        http: Optional[ResearchHttpClient] = None,
-        connectors: Optional[dict[str, object]] = None,
+        http: ResearchHttpClient | None = None,
+        connectors: dict[str, object] | None = None,
     ) -> None:
         self.http = http or ResearchHttpClient()
         self.connectors = connectors or {
@@ -95,7 +95,7 @@ class ConnectorRegistry:
         self,
         query: str,
         *,
-        source_types: Optional[Iterable[str]] = None,
+        source_types: Iterable[str] | None = None,
         limit: int = 8,
     ) -> SearchBundle:
         selected = list(source_types or ALL_SOURCE_TYPES)
@@ -117,7 +117,7 @@ class ConnectorRegistry:
                 except ResearchError as exc:
                     bundle.errors[name] = str(exc)
                     logger.warning("Connector %s failed: %s", name, exc)
-                except Exception as exc:  # noqa: BLE001 - isolate connector faults
+                except Exception as exc:
                     bundle.errors[name] = f"Unexpected error: {exc}"
                     logger.exception("Connector %s crashed", name)
         # Prefer richer sources first, then recency.
@@ -134,15 +134,13 @@ class ConnectorRegistry:
         self,
         queries: list[str],
         *,
-        source_types: Optional[Iterable[str]] = None,
+        source_types: Iterable[str] | None = None,
         limit: int = 6,
         max_results: int = 30,
     ) -> SearchBundle:
         combined = SearchBundle(query="; ".join(queries))
         for query in queries:
-            combined.extend(
-                self.search(query, source_types=source_types, limit=limit)
-            )
+            combined.extend(self.search(query, source_types=source_types, limit=limit))
         combined.dedupe()
         combined.results = combined.results[:max_results]
         return combined
@@ -153,15 +151,15 @@ class ResearchService:
 
     def __init__(
         self,
-        repository: Optional[Repository] = None,
-        registry: Optional[ConnectorRegistry] = None,
+        repository: Repository | None = None,
+        registry: ConnectorRegistry | None = None,
     ) -> None:
         self.repository = repository or Repository()
         self.registry = registry or ConnectorRegistry()
         self.http = self.registry.http
         self.settings = get_settings()
 
-    def record_source(self, session_id: Optional[str], result: SearchResult) -> None:
+    def record_source(self, session_id: str | None, result: SearchResult) -> None:
         if not result.url:
             return
         self.repository.save_research_source(
@@ -176,11 +174,11 @@ class ResearchService:
 
     def search(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         query: str,
         *,
-        source_types: Optional[Iterable[str]] = None,
-        limit: Optional[int] = None,
+        source_types: Iterable[str] | None = None,
+        limit: int | None = None,
     ) -> SearchBundle:
         bundle = self.registry.search(
             query,
@@ -193,10 +191,10 @@ class ResearchService:
 
     def multi_search(
         self,
-        session_id: Optional[str],
+        session_id: str | None,
         queries: list[str],
         *,
-        source_types: Optional[Iterable[str]] = None,
+        source_types: Iterable[str] | None = None,
         limit: int = 6,
         max_results: int = 30,
     ) -> SearchBundle:
@@ -210,7 +208,7 @@ class ResearchService:
             self.record_source(session_id, result)
         return bundle
 
-    def fetch_page(self, session_id: Optional[str], url: str) -> PageContent:
+    def fetch_page(self, session_id: str | None, url: str) -> PageContent:
         page = self.http.fetch_page(url)
         self.repository.save_research_source(
             session_id=session_id,
@@ -224,11 +222,9 @@ class ResearchService:
         return page
 
     def github_projects(
-        self, session_id: Optional[str], query: str, limit: int = 8
+        self, session_id: str | None, query: str, limit: int = 8
     ) -> list[GitHubProject]:
-        bundle = self.search(
-            session_id, query, source_types=["github"], limit=limit
-        )
+        bundle = self.search(session_id, query, source_types=["github"], limit=limit)
         projects: list[GitHubProject] = []
         for result in bundle.results:
             metadata = result.metadata
@@ -241,17 +237,11 @@ class ResearchService:
                     stars=int(metadata.get("stars", 0) or 0),
                     forks=int(metadata.get("forks", 0) or 0),
                     language=metadata.get("language"),
-                    last_updated=(
-                        datetime.fromisoformat(updated.replace("Z", "+00:00"))
-                        if updated
-                        else None
-                    ),
+                    last_updated=(datetime.fromisoformat(updated) if updated else None),
                     topics=metadata.get("topics", []),
                     is_active=not bool(metadata.get("archived")),
                     documentation_quality=(
-                        "described"
-                        if metadata.get("description")
-                        else "minimal"
+                        "described" if metadata.get("description") else "minimal"
                     ),
                     functionality_summary=result.snippet,
                 )

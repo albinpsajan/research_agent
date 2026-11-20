@@ -1,0 +1,21 @@
+{
+  "include": [
+    "src",
+    "tests"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    ".venv",
+    "data"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    ".",
+    ".venv/Lib/site-packages",
+    "C:/Users/albin/AppData/Roaming/Python/Python314/site-packages"
+  ],
+  "pythonVersion": "3.14",
+  "pythonPlatform": "Windows"
+}

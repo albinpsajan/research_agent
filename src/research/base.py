@@ -6,10 +6,11 @@ import ipaddress
 import re
 import socket
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
+
 from src.utils.hackathon_time import utc_now
 
 
@@ -24,16 +25,14 @@ class SearchResult(BaseModel):
     url: str
     snippet: str = ""
     source_type: str = "web"
-    published_at: Optional[datetime] = None
+    published_at: datetime | None = None
     authors: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     reliability: float = Field(default=0.5, ge=0, le=1)
 
     def as_context(self, index: int) -> str:
         date = (
-            self.published_at.strftime("%Y-%m-%d")
-            if self.published_at
-            else "undated"
+            self.published_at.strftime("%Y-%m-%d") if self.published_at else "undated"
         )
         meta = ""
         if self.metadata.get("stars") is not None:
@@ -100,15 +99,8 @@ def validate_public_url(url: str) -> str:
                 ip = ipaddress.ip_address(address)
             except ValueError:
                 continue
-            if (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_reserved
-            ):
-                raise ResearchError(
-                    f"Host {host} resolves to a private address"
-                )
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                raise ResearchError(f"Host {host} resolves to a private address")
     return candidate
 
 
@@ -122,8 +114,23 @@ def clean_text(text: str, limit: int = 12000) -> str:
 def query_terms(query: str, limit: int = 6) -> list[str]:
     """Extract meaningful lowercase terms for simple relevance filtering."""
     stop = {
-        "the", "and", "for", "with", "from", "that", "this", "into", "using",
-        "based", "system", "systems", "data", "new", "how", "why", "what",
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "that",
+        "this",
+        "into",
+        "using",
+        "based",
+        "system",
+        "systems",
+        "data",
+        "new",
+        "how",
+        "why",
+        "what",
     }
     terms = re.findall(r"[a-zA-Z][a-zA-Z0-9\-]{2,}", query.lower())
     seen: list[str] = []

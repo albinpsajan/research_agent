@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import socket
+
 import pytest
 
 from src.agents.base import allowed_urls, sanitize_model_urls, similarity
-from src.research.base import ResearchError, validate_public_url
-from src.research.registry import SearchBundle
-from src.research.base import SearchResult
 from src.models.hackathon import OrganizerProfile
+from src.research.base import ResearchError, SearchResult, validate_public_url
+from src.research.registry import SearchBundle
 
 
 @pytest.mark.parametrize(
@@ -31,7 +31,9 @@ def test_private_or_unsafe_urls_rejected(url: str) -> None:
 
 def test_public_url_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     # Deterministic mock DNS for offline test execution
-    def mock_getaddrinfo(host: str, port: object, *args: object, **kwargs: object) -> list:
+    def mock_getaddrinfo(
+        host: str, port: object, *args: object, **kwargs: object
+    ) -> list:
         if host == "example.com":
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
         raise socket.gaierror(-2, "Name or service not known")
@@ -42,7 +44,9 @@ def test_public_url_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_dns_rebinding_private_ip_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     # A public-looking hostname that resolves to an internal/private IP must be blocked
-    def mock_rebinding(host: str, port: object, *args: object, **kwargs: object) -> list:
+    def mock_rebinding(
+        host: str, port: object, *args: object, **kwargs: object
+    ) -> list:
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.100", 0))]
 
     monkeypatch.setattr(socket, "getaddrinfo", mock_rebinding)
@@ -78,7 +82,10 @@ def test_hallucinated_urls_are_removed() -> None:
 
 
 def test_similarity_detects_duplicates() -> None:
-    assert similarity("urban air quality routing", "urban air quality route planning") > 0.5
+    assert (
+        similarity("urban air quality routing", "urban air quality route planning")
+        > 0.5
+    )
     assert similarity("quantum computing", "municipal waste recycling") < 0.2
 
 

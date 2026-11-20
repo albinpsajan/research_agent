@@ -13,9 +13,8 @@ from __future__ import annotations
 
 import json
 import os
-from functools import lru_cache
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -101,8 +100,8 @@ class ResearchSettings(BaseModel):
 
     max_sources: int = Field(default=60, ge=5, le=500)
     timeout_seconds: int = Field(default=30, ge=5, le=120)
-    github_token: Optional[str] = Field(default=None)
-    contact_email: Optional[str] = Field(default=None)
+    github_token: str | None = Field(default=None)
+    contact_email: str | None = Field(default=None)
     max_retries: int = Field(default=2, ge=0, le=5)
     rate_limit_delay: float = Field(default=1.0, ge=0.0, le=30.0)
     respect_robots_txt: bool = Field(default=True)
@@ -171,7 +170,7 @@ class EvaluationSettings(BaseModel):
         }
 
     @model_validator(mode="after")
-    def _weights_total_100(self) -> "EvaluationSettings":
+    def _weights_total_100(self) -> EvaluationSettings:
         if self.total_weight != 100:
             raise ValueError(
                 f"Evaluation weights must total 100, got {self.total_weight}"
@@ -193,10 +192,10 @@ class LoggingSettings(BaseModel):
     """Logging configuration."""
 
     level: str = Field(default="INFO")
-    log_file: Path = Field(default_factory=lambda: _DATA_DIR / "logs" / "hackathoniq.log")
-    format: str = Field(
-        default="%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+    log_file: Path = Field(
+        default_factory=lambda: _DATA_DIR / "logs" / "hackathoniq.log"
     )
+    format: str = Field(default="%(asctime)s | %(name)s | %(levelname)s | %(message)s")
 
 
 class Settings(BaseModel):
@@ -217,11 +216,13 @@ class Settings(BaseModel):
         return Path(self.storage.db_path)
 
     @classmethod
-    def load(cls) -> "Settings":
+    def load(cls) -> Settings:
         """Build settings from defaults, user overrides and environment."""
         _load_dotenv()
         user = _load_user_settings()
-        user_ollama = user.get("ollama", {}) if isinstance(user.get("ollama"), dict) else {}
+        user_ollama = (
+            user.get("ollama", {}) if isinstance(user.get("ollama"), dict) else {}
+        )
         user_storage = (
             user.get("storage", {}) if isinstance(user.get("storage"), dict) else {}
         )
@@ -233,24 +234,22 @@ class Settings(BaseModel):
             if isinstance(user.get("continuous_intelligence"), dict)
             else {}
         )
-        user_agent = user.get("agent", {}) if isinstance(user.get("agent"), dict) else {}
+        user_agent = (
+            user.get("agent", {}) if isinstance(user.get("agent"), dict) else {}
+        )
 
         ollama = OllamaSettings(
             base_url=os.getenv(
                 "OLLAMA_BASE_URL",
                 user_ollama.get("base_url", "http://localhost:11434"),
             ),
-            model=os.getenv(
-                "OLLAMA_MODEL", user_ollama.get("model", "qwen2.5:7b")
-            ),
+            model=os.getenv("OLLAMA_MODEL", user_ollama.get("model", "qwen2.5:7b")),
             fallback_model=os.getenv(
                 "OLLAMA_FALLBACK_MODEL",
                 user_ollama.get("fallback_model", "qwen2.5:3b"),
             ),
             num_ctx=int(
-                os.getenv(
-                    "OLLAMA_NUM_CTX", str(user_ollama.get("num_ctx", 8192))
-                )
+                os.getenv("OLLAMA_NUM_CTX", str(user_ollama.get("num_ctx", 8192)))
             ),
             num_predict=int(
                 os.getenv(
@@ -269,9 +268,7 @@ class Settings(BaseModel):
         )
         storage = StorageSettings(
             budget_gb=float(
-                os.getenv(
-                    "STORAGE_BUDGET_GB", str(user_storage.get("budget_gb", 30))
-                )
+                os.getenv("STORAGE_BUDGET_GB", str(user_storage.get("budget_gb", 30)))
             ),
             warn_threshold=float(
                 os.getenv(
@@ -314,9 +311,7 @@ class Settings(BaseModel):
         )
         agent = AgentSettings(
             max_domains=int(
-                os.getenv(
-                    "MAX_DOMAINS", str(user_agent.get("max_domains", 8))
-                )
+                os.getenv("MAX_DOMAINS", str(user_agent.get("max_domains", 8)))
             ),
             problems_per_domain=int(
                 os.getenv(
@@ -325,9 +320,7 @@ class Settings(BaseModel):
                 )
             ),
             max_finalists=int(
-                os.getenv(
-                    "MAX_FINALISTS", str(user_agent.get("max_finalists", 5))
-                )
+                os.getenv("MAX_FINALISTS", str(user_agent.get("max_finalists", 5)))
             ),
             max_debate_rounds=int(
                 os.getenv(
@@ -349,8 +342,7 @@ class Settings(BaseModel):
                     str(user_ci.get("max_items_per_source", 50)),
                 )
             ),
-            enabled=os.getenv("CI_ENABLED", "true").lower()
-            not in ("0", "false", "no"),
+            enabled=os.getenv("CI_ENABLED", "true").lower() not in ("0", "false", "no"),
         )
         logging_cfg = LoggingSettings(
             level=os.getenv("LOG_LEVEL", "INFO"),
@@ -371,7 +363,7 @@ class Settings(BaseModel):
         )
 
 
-_settings: Optional[Settings] = None
+_settings: Settings | None = None
 
 
 def get_settings() -> Settings:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,7 +26,7 @@ class StorageReport(BaseModel):
 class StorageManager:
     """Manages disk-budget tracking, directory creation, and cache cleanup."""
 
-    def __init__(self, settings: Optional[object] = None) -> None:
+    def __init__(self, settings: object | None = None) -> None:
         self._settings = settings or get_settings()
         self._storage = self._settings.storage
 
@@ -58,7 +57,7 @@ class StorageManager:
         return total / (1024**3)
 
     @staticmethod
-    def get_disk_free_gb(path: Optional[Path] = None) -> float:
+    def get_disk_free_gb(path: Path | None = None) -> float:
         """Return free disk space in GiB for the volume containing *path*."""
         target = Path(path or ".")
         # A not-yet-created application directory still belongs to a volume;
@@ -119,15 +118,19 @@ class StorageManager:
         if new_usage > report.budget_gb:
             return (
                 False,
-                f"Download of {size_gb:.2f} GB would exceed budget "
-                f"({new_usage:.2f}/{report.budget_gb:.1f} GB). "
-                "Free up space or increase the budget.",
+                (
+                    f"Download of {size_gb:.2f} GB would exceed budget "
+                    f"({new_usage:.2f}/{report.budget_gb:.1f} GB). "
+                    "Free up space or increase the budget."
+                ),
             )
         if size_gb > report.disk_free_gb:
             return (
                 False,
-                f"Download of {size_gb:.2f} GB exceeds available disk space "
-                f"({report.disk_free_gb:.1f} GB free).",
+                (
+                    f"Download of {size_gb:.2f} GB exceeds available disk space "
+                    f"({report.disk_free_gb:.1f} GB free)."
+                ),
             )
         return (True, "OK")
 

@@ -1,13 +1,17 @@
 """Pydantic models for research and existing solution analysis."""
+
 from __future__ import annotations
+
 from datetime import datetime
-from enum import Enum
-from typing import Optional, Any
+from enum import StrEnum
+from typing import Any
+
 from pydantic import BaseModel, Field
+
 from src.utils.hackathon_time import utc_now
 
 
-class SourceType(str, Enum):
+class SourceType(StrEnum):
     GITHUB = "github"
     ARXIV = "arxiv"
     OPENALEX = "openalex"
@@ -21,37 +25,42 @@ class SourceType(str, Enum):
 
 class ResearchSource(BaseModel):
     """A tracked research source with provenance."""
+
     url: str
     title: str
     source_type: SourceType
     retrieved_at: datetime = Field(default_factory=utc_now)
-    description: Optional[str] = None
+    description: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     reliability: float = Field(default=0.5, ge=0, le=1)
 
 
 class GitHubProject(BaseModel):
     """GitHub repository analysis."""
+
     url: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     stars: int = 0
     forks: int = 0
-    language: Optional[str] = None
-    last_updated: Optional[datetime] = None
+    language: str | None = None
+    last_updated: datetime | None = None
     topics: list[str] = Field(default_factory=list)
     is_active: bool = True
     documentation_quality: str = "unknown"
-    functionality_summary: Optional[str] = None
+    functionality_summary: str | None = None
     limitations: list[str] = Field(default_factory=list)
 
 
 class ExistingSolution(BaseModel):
     """An existing solution to a problem candidate."""
+
     name: str
-    solution_type: str  # "open_source", "commercial", "startup", "research", "hackathon_project"
+    solution_type: (
+        str  # "open_source", "commercial", "startup", "research", "hackathon_project"
+    )
     description: str
-    url: Optional[str] = None
+    url: str | None = None
     what_it_solves: str = ""
     target_users: list[str] = Field(default_factory=list)
     technologies: list[str] = Field(default_factory=list)
@@ -59,10 +68,10 @@ class ExistingSolution(BaseModel):
     unsolved_aspects: list[str] = Field(default_factory=list)
     missing_features: list[str] = Field(default_factory=list)
     adoption_barriers: list[str] = Field(default_factory=list)
-    source: Optional[ResearchSource] = None
+    source: ResearchSource | None = None
 
 
-class OpportunityClassification(str, Enum):
+class OpportunityClassification(StrEnum):
     COMMONLY_SOLVED = "commonly_solved"
     PARTIALLY_SOLVED = "partially_solved"
     LIMITED_SOLUTION = "existing_solution_with_important_limitations"
@@ -73,6 +82,7 @@ class OpportunityClassification(str, Enum):
 
 class InnovationGap(BaseModel):
     """An identified gap in existing solutions."""
+
     problem_candidate_id: str
     classification: OpportunityClassification
     existing_solutions: list[ExistingSolution] = Field(default_factory=list)
@@ -86,6 +96,7 @@ class InnovationGap(BaseModel):
 
 class InnovationReport(BaseModel):
     """Complete existing solutions and innovation gap report."""
+
     gaps: list[InnovationGap] = Field(default_factory=list)
     total_solutions_found: int = 0
     total_github_projects: int = 0

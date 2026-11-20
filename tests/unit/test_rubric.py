@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-
-from src.utils.hackathon_time import utc_now
+from datetime import timedelta
 
 from src.evaluation.rubric import GATE_NAMES, EvaluationService
 from src.models.candidate import (
@@ -14,7 +12,12 @@ from src.models.candidate import (
 )
 from src.models.domain import ProblemCandidate, ProblemEvidence
 from src.models.hackathon import HackathonInput, HackathonIntelligence
-from src.models.research import ExistingSolution, InnovationGap, OpportunityClassification
+from src.models.research import (
+    ExistingSolution,
+    InnovationGap,
+    OpportunityClassification,
+)
+from src.utils.hackathon_time import utc_now
 from tests.fakes import FakeLLM
 
 
@@ -38,7 +41,9 @@ def _problem(evidence_count: int = 2) -> ProblemCandidate:
     )
 
 
-def _gap(classification: OpportunityClassification = OpportunityClassification.DIFFERENTIATED) -> InnovationGap:
+def _gap(
+    classification: OpportunityClassification = OpportunityClassification.DIFFERENTIATED,
+) -> InnovationGap:
     return InnovationGap(
         problem_candidate_id="P01",
         classification=classification,
@@ -110,9 +115,11 @@ def _hackathon(hours: int = 36) -> HackathonInput:
 def test_all_gates_pass_and_score_is_weighted() -> None:
     service = EvaluationService(FakeLLM(score=8.0))
     evaluation = service.evaluate(
-        _candidate(), _problem(), _gap(), _hackathon(), HackathonIntelligence(
-            hackathon_input=_hackathon()
-        )
+        _candidate(),
+        _problem(),
+        _gap(),
+        _hackathon(),
+        HackathonIntelligence(hackathon_input=_hackathon()),
     )
     assert len(evaluation.scores) == 8
     assert round(evaluation.base_score, 1) == 80.0
@@ -125,7 +132,10 @@ def test_all_gates_pass_and_score_is_weighted() -> None:
 def test_missing_evidence_fails_gate_despite_high_score() -> None:
     service = EvaluationService(FakeLLM(score=10.0))
     evaluation = service.evaluate(
-        _candidate(), _problem(evidence_count=0), _gap(), _hackathon(),
+        _candidate(),
+        _problem(evidence_count=0),
+        _gap(),
+        _hackathon(),
         HackathonIntelligence(hackathon_input=_hackathon()),
     )
     evidence_gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[0])
@@ -137,8 +147,11 @@ def test_missing_evidence_fails_gate_despite_high_score() -> None:
 def test_commonly_solved_fails_originality_gate() -> None:
     service = EvaluationService(FakeLLM())
     evaluation = service.evaluate(
-        _candidate(), _problem(), _gap(OpportunityClassification.COMMONLY_SOLVED),
-        _hackathon(), HackathonIntelligence(hackathon_input=_hackathon()),
+        _candidate(),
+        _problem(),
+        _gap(OpportunityClassification.COMMONLY_SOLVED),
+        _hackathon(),
+        HackathonIntelligence(hackathon_input=_hackathon()),
     )
     gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[2])
     assert gate.status.value == "failed"
@@ -148,7 +161,10 @@ def test_commonly_solved_fails_originality_gate() -> None:
 def test_unrealistic_hours_fail_deadline_gate() -> None:
     service = EvaluationService(FakeLLM())
     evaluation = service.evaluate(
-        _candidate(hours=200), _problem(), _gap(), _hackathon(hours=36),
+        _candidate(hours=200),
+        _problem(),
+        _gap(),
+        _hackathon(hours=36),
         HackathonIntelligence(hackathon_input=_hackathon(hours=36)),
     )
     gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[4])

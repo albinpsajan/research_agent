@@ -8,9 +8,9 @@ runs with explicit freshness labels.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from config.logging_config import get_logger
 from config.settings import get_settings
@@ -23,13 +23,17 @@ from src.models.intelligence import (
 )
 from src.research.base import ResearchError, SearchResult, query_terms
 from src.research.github import GitHubConnector
-from src.utils.hackathon_time import utc_now
 from src.research.scholarly import ArxivConnector, OpenAlexConnector
 from src.research.web import HackerNewsConnector, RSSConnector
+from src.utils.hackathon_time import utc_now
 
 logger = get_logger("intelligence")
 
-SOURCES_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "intelligence_sources.json"
+SOURCES_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "config"
+    / "intelligence_sources.json"
+)
 
 
 def load_sources_config() -> dict[str, Any]:
@@ -46,13 +50,13 @@ class ContinuousIntelligenceService:
 
     def __init__(
         self,
-        repository: Optional[Repository] = None,
+        repository: Repository | None = None,
         *,
-        github: Optional[GitHubConnector] = None,
-        arxiv: Optional[ArxivConnector] = None,
-        openalex: Optional[OpenAlexConnector] = None,
-        rss: Optional[RSSConnector] = None,
-        hackernews: Optional[HackerNewsConnector] = None,
+        github: GitHubConnector | None = None,
+        arxiv: ArxivConnector | None = None,
+        openalex: OpenAlexConnector | None = None,
+        rss: RSSConnector | None = None,
+        hackernews: HackerNewsConnector | None = None,
     ) -> None:
         self.repository = repository or Repository()
         self.settings = get_settings()
@@ -67,7 +71,7 @@ class ContinuousIntelligenceService:
     # Scheduling
     # ------------------------------------------------------------------
 
-    def last_refresh(self) -> Optional[datetime]:
+    def last_refresh(self) -> datetime | None:
         row = self.repository.get_last_refresh()
         if not row:
             return None
@@ -75,8 +79,7 @@ class ContinuousIntelligenceService:
         try:
             dt = datetime.fromisoformat(str(raw))
             if dt.tzinfo is None:
-                from datetime import timezone
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             return dt
         except (ValueError, TypeError):
             return None
@@ -91,7 +94,7 @@ class ContinuousIntelligenceService:
             hours=self.settings.continuous_intelligence.refresh_interval_hours
         )
 
-    def next_refresh_at(self) -> Optional[datetime]:
+    def next_refresh_at(self) -> datetime | None:
         last = self.last_refresh()
         if last is None:
             return None
@@ -103,10 +106,7 @@ class ContinuousIntelligenceService:
         if not self.is_due():
             return RefreshSummary(
                 skipped=True,
-                skip_reason=(
-                    "Not due yet. Next refresh at "
-                    f"{self.next_refresh_at()}."
-                ),
+                skip_reason=(f"Not due yet. Next refresh at {self.next_refresh_at()}."),
             )
         return self.refresh(force=False)
 
@@ -116,7 +116,9 @@ class ContinuousIntelligenceService:
 
     def refresh(self, force: bool = True) -> RefreshSummary:
         if not force and not self.is_due():
-            return RefreshSummary(skipped=True, skip_reason="Refresh interval not elapsed.")
+            return RefreshSummary(
+                skipped=True, skip_reason="Refresh interval not elapsed."
+            )
         summary = RefreshSummary()
         collectors = [
             ("github", self._collect_github),
@@ -158,9 +160,7 @@ class ContinuousIntelligenceService:
                         completed_at=utc_now(),
                     )
                 )
-                self.repository.log_refresh(
-                    source_type, 0, 0, "error", str(exc)[:500]
-                )
+                self.repository.log_refresh(source_type, 0, 0, "error", str(exc)[:500])
         stale = self.repository.mark_stale_intelligence(
             self.settings.continuous_intelligence.stale_after_days
         )
@@ -169,7 +169,7 @@ class ContinuousIntelligenceService:
         summary.finalize()
         return summary
 
-    def _store(self, result: SearchResult, category: Optional[str] = None) -> Optional[int]:
+    def _store(self, result: SearchResult, category: str | None = None) -> int | None:
         topics = query_terms(f"{result.title} {result.snippet}", limit=8)
         metadata = dict(result.metadata)
         metadata.update(
@@ -192,7 +192,7 @@ class ContinuousIntelligenceService:
             freshness_date=(
                 result.published_at.isoformat()
                 if result.published_at
-                else datetime.utcnow().isoformat()
+                else utc_now().isoformat()
             ),
         )
 
@@ -263,7 +263,9 @@ class ContinuousIntelligenceService:
                 result.metadata["watch_topic"] = query
                 results.append(result)
         if not results and errors:
-            raise ResearchError(f"All OpenAlex intelligence queries failed: {errors[-1]}")
+            raise ResearchError(
+                f"All OpenAlex intelligence queries failed: {errors[-1]}"
+            )
         return results[:limit]
 
     def _collect_rss(self) -> list[SearchResult]:
@@ -275,7 +277,9 @@ class ContinuousIntelligenceService:
         results = self.hackernews.search("", limit=min(limit, 30))
         for result in results:
             result.metadata["signal_type"] = (
-                "product_launch" if "show hn" in result.title.lower() else "technology_signal"
+                "product_launch"
+                if "show hn" in result.title.lower()
+                else "technology_signal"
             )
         return results
 
@@ -284,7 +288,7 @@ class ContinuousIntelligenceService:
     # ------------------------------------------------------------------
 
     def context_for_theme(
-        self, theme: str, extra_terms: Optional[list[str]] = None, limit: int = 20
+        self, theme: str, extra_terms: list[str] | None = None, limit: int = 20
     ) -> IntelligenceContext:
         terms = query_terms(theme, limit=6) + [
             term for term in (extra_terms or []) if term
@@ -323,7 +327,9 @@ class ContinuousIntelligenceService:
             note=note,
         )
 
-    def context_as_prompt(self, context: IntelligenceContext, max_items: int = 10) -> str:
+    def context_as_prompt(
+        self, context: IntelligenceContext, max_items: int = 10
+    ) -> str:
         if not context.items:
             return ""
         lines = [f"Freshness: {context.note}"]
@@ -342,4 +348,4 @@ def _parse_datetime(value: Any) -> datetime:
     try:
         return datetime.fromisoformat(str(value))
     except (ValueError, TypeError):
-        return datetime.utcnow()
+        return utc_now()

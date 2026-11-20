@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import feedparser
 
@@ -16,11 +16,11 @@ from src.research.http_client import ResearchHttpClient
 logger = get_logger("research.scholarly")
 
 
-def _parse_iso(value: Optional[str]) -> Optional[datetime]:
+def _parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)
     except ValueError:
         return None
 
@@ -31,11 +31,11 @@ class ArxivConnector:
     name = "arxiv"
     reliability = 0.85
 
-    def __init__(self, http: Optional[ResearchHttpClient] = None) -> None:
+    def __init__(self, http: ResearchHttpClient | None = None) -> None:
         self.http = http or ResearchHttpClient()
 
     def search(self, query: str, limit: int = 8) -> list[SearchResult]:
-        safe_query = re.sub(r'[^\w\s:\-\.]', " ", query).strip()
+        safe_query = re.sub(r"[^\w\s:\-\.]", " ", query).strip()
         if not safe_query:
             return []
         params = {
@@ -86,12 +86,12 @@ class OpenAlexConnector:
     name = "openalex"
     reliability = 0.82
 
-    def __init__(self, http: Optional[ResearchHttpClient] = None) -> None:
+    def __init__(self, http: ResearchHttpClient | None = None) -> None:
         self.http = http or ResearchHttpClient()
         self.contact_email = get_settings().research.contact_email
 
     @staticmethod
-    def _abstract(inverted: Optional[dict[str, list[int]]]) -> str:
+    def _abstract(inverted: dict[str, list[int]] | None) -> str:
         if not inverted:
             return ""
         positions: list[tuple[int, str]] = []
@@ -152,7 +152,7 @@ class CrossrefConnector:
     name = "crossref"
     reliability = 0.78
 
-    def __init__(self, http: Optional[ResearchHttpClient] = None) -> None:
+    def __init__(self, http: ResearchHttpClient | None = None) -> None:
         self.http = http or ResearchHttpClient()
         self.contact_email = get_settings().research.contact_email
 
@@ -196,7 +196,9 @@ class CrossrefConnector:
             results.append(
                 SearchResult(
                     title=" ".join(str(titles[0]).split()),
-                    url=f"https://doi.org/{doi}" if doi else "https://www.crossref.org/",
+                    url=f"https://doi.org/{doi}"
+                    if doi
+                    else "https://www.crossref.org/",
                     snippet=" ".join(abstract.split())[:900],
                     source_type="crossref",
                     published_at=date_value,

@@ -6,8 +6,8 @@ research connectors.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -19,7 +19,12 @@ from src.agents.adversarial_critic import (
     SelectionLLM,
     VerdictLLM,
 )
-from src.agents.domain_discovery import DomainLLM, DomainListLLM, ProblemListLLM, ProblemLLM
+from src.agents.domain_discovery import (
+    DomainListLLM,
+    DomainLLM,
+    ProblemListLLM,
+    ProblemLLM,
+)
 from src.agents.hackathon_intelligence import (
     CriterionLLM,
     HackathonIntelLLM,
@@ -29,7 +34,6 @@ from src.agents.hackathon_intelligence import (
 from src.agents.innovation_research import ExistingSolutionLLM, GapLLM
 from src.agents.solution_architect import RequirementLLM, RiskLLM, SolutionLLM
 from src.evaluation.rubric import CriterionScoreLLM, EvaluationLLM, GateLLM
-from src.intelligence.service import ContinuousIntelligenceService
 from src.models.intelligence import IntelligenceContext
 from src.models.research import GitHubProject
 from src.research.base import PageContent, SearchResult
@@ -48,10 +52,14 @@ class FakeLLM:
     def model_name(self) -> str:
         return "fake-model"
 
-    def generate_text(self, prompt: str, system: Optional[str] = None, temperature=None) -> str:
+    def generate_text(
+        self, prompt: str, system: str | None = None, temperature=None
+    ) -> str:
         return "deterministic text"
 
-    def generate_json(self, prompt: str, schema: type[BaseModel], system=None, temperature=None):
+    def generate_json(
+        self, prompt: str, schema: type[BaseModel], system=None, temperature=None
+    ):
         name = schema.__name__
         self.calls.append(name)
         if name == "ScoutLLM":
@@ -160,7 +168,9 @@ class FakeLLM:
                             evidence_indices=[1, 3],
                             inadequate_solutions=["Manual spot checks"],
                             overlooked_needs=["Low-cost contamination detection"],
-                            emerging_opportunities=["Computer vision on collection vehicles"],
+                            emerging_opportunities=[
+                                "Computer vision on collection vehicles"
+                            ],
                             future_potential=["Pay-as-you-throw feedback"],
                             theme_connection="Improves urban circularity.",
                             is_generic=False,
@@ -409,7 +419,7 @@ class FakeResearch:
                 snippet="Commuter exposure varies substantially by route.",
                 source_type="openalex",
                 reliability=0.86,
-                published_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+                published_at=datetime(2025, 1, 1, tzinfo=UTC),
             ),
             SearchResult(
                 title="City air quality dashboard",
@@ -441,7 +451,9 @@ class FakeResearch:
         bundle = SearchBundle(query=query, results=self._results())
         return bundle
 
-    def multi_search(self, session_id, queries, source_types=None, limit=6, max_results=30) -> SearchBundle:
+    def multi_search(
+        self, session_id, queries, source_types=None, limit=6, max_results=30
+    ) -> SearchBundle:
         self.queries.extend(queries)
         bundle = SearchBundle(query="; ".join(queries), results=self._results())
         bundle.dedupe()
@@ -472,7 +484,9 @@ class FakeResearch:
 class FakeIntelligence:
     """No-op Continuous Intelligence for offline integration tests."""
 
-    def context_for_theme(self, theme, extra_terms=None, limit=20) -> IntelligenceContext:
+    def context_for_theme(
+        self, theme, extra_terms=None, limit=20
+    ) -> IntelligenceContext:
         return IntelligenceContext(note="Fake intelligence: no stored signals.")
 
     def context_as_prompt(self, context, max_items=10) -> str:

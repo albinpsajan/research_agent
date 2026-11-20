@@ -1,13 +1,16 @@
 """Pydantic models for evaluation, scoring, and quality gates."""
+
 from __future__ import annotations
+
 from datetime import datetime
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
+
 from src.utils.hackathon_time import utc_now
 
 
-class QualityGateStatus(str, Enum):
+class QualityGateStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     WARNING = "warning"
@@ -16,6 +19,7 @@ class QualityGateStatus(str, Enum):
 
 class QualityGate(BaseModel):
     """A mandatory quality gate check."""
+
     name: str
     description: str
     status: QualityGateStatus = QualityGateStatus.NOT_EVALUATED
@@ -25,6 +29,7 @@ class QualityGate(BaseModel):
 
 class ScoreCriterion(BaseModel):
     """A single scoring criterion with justification."""
+
     name: str
     weight: int
     score: float = Field(default=0, ge=0, le=10)
@@ -35,6 +40,7 @@ class ScoreCriterion(BaseModel):
 
 class CandidateEvaluation(BaseModel):
     """Complete evaluation of a candidate solution."""
+
     candidate_id: str
     candidate_title: str
     domain: str
@@ -49,7 +55,7 @@ class CandidateEvaluation(BaseModel):
     weaknesses: list[str] = Field(default_factory=list)
     debate_recommendation: str = ""
     is_qualified: bool = False
-    rank: Optional[int] = None
+    rank: int | None = None
 
     def calculate_total(self) -> None:
         """Calculate base weighted score, gates, and post-debate total."""
@@ -69,6 +75,7 @@ class CandidateEvaluation(BaseModel):
 
 class DebateRound(BaseModel):
     """A single round of adversarial debate."""
+
     round_number: int
     candidate_id: str
     criticism: str
@@ -81,6 +88,7 @@ class DebateRound(BaseModel):
 
 class DebateHistory(BaseModel):
     """Complete debate history for a candidate."""
+
     candidate_id: str
     rounds: list[DebateRound] = Field(default_factory=list)
     final_assessment: str = ""
@@ -91,11 +99,12 @@ class DebateHistory(BaseModel):
 
 class WinnerSelection(BaseModel):
     """Final winner selection result."""
+
     has_winner: bool = False
-    winner: Optional[CandidateEvaluation] = None
-    winner_solution: Optional[str] = None  # JSON reference to CandidateSolution
+    winner: CandidateEvaluation | None = None
+    winner_solution: str | None = None  # JSON reference to CandidateSolution
     runner_ups: list[CandidateEvaluation] = Field(default_factory=list)
-    rejection_reason: Optional[str] = None
+    rejection_reason: str | None = None
     debate_summary: str = ""
     selection_methodology: str = ""
     total_candidates_evaluated: int = 0

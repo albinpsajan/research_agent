@@ -11,7 +11,6 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
 
 from config.logging_config import get_logger
 from config.settings import get_settings
@@ -22,10 +21,10 @@ logger = get_logger("database")
 class DatabaseConnection:
     """Thread-safe manager for one SQLite database connection."""
 
-    def __init__(self, db_path: Optional[Path] = None) -> None:
+    def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = Path(db_path or get_settings().db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection: Optional[sqlite3.Connection] = None
+        self._connection: sqlite3.Connection | None = None
         self._lock = threading.RLock()
 
     def get_connection(self) -> sqlite3.Connection:
@@ -83,7 +82,7 @@ class DatabaseConnection:
                 logger.error("SQL error in executemany: %s", exc)
                 raise
 
-    def fetch_one(self, sql: str, params: tuple = ()) -> Optional[sqlite3.Row]:
+    def fetch_one(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
         """Fetch a single row while holding the lock."""
         with self._lock:
             cursor = self.execute(sql, params)
@@ -104,11 +103,11 @@ class DatabaseConnection:
                 logger.info("Database connection closed")
 
 
-_db: Optional[DatabaseConnection] = None
+_db: DatabaseConnection | None = None
 _db_lock = threading.Lock()
 
 
-def get_db(db_path: Optional[Path] = None) -> DatabaseConnection:
+def get_db(db_path: Path | None = None) -> DatabaseConnection:
     """Get or create the global database connection."""
     global _db
     with _db_lock:

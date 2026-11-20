@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
-from src.utils.hackathon_time import utc_now
 
 from src.models.candidate import FeasibilityReport
 from src.models.domain import DomainMap
@@ -14,6 +12,7 @@ from src.models.evaluation import DebateHistory, WinnerSelection
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.report import FinalReport
 from src.models.research import InnovationReport
+from src.utils.hackathon_time import utc_now
 
 
 class PipelineOptions(BaseModel):
@@ -31,17 +30,17 @@ class PipelineResult(BaseModel):
 
     session_id: str
     input: HackathonInput
-    intelligence: Optional[HackathonIntelligence] = None
-    domain_map: Optional[DomainMap] = None
-    innovation_report: Optional[InnovationReport] = None
-    feasibility: Optional[FeasibilityReport] = None
+    intelligence: HackathonIntelligence | None = None
+    domain_map: DomainMap | None = None
+    innovation_report: InnovationReport | None = None
+    feasibility: FeasibilityReport | None = None
     debates: list[DebateHistory] = Field(default_factory=list)
-    winner: Optional[WinnerSelection] = None
-    report: Optional[FinalReport] = None
+    winner: WinnerSelection | None = None
+    report: FinalReport | None = None
     status: str = "completed"
-    error: Optional[str] = None
+    error: str | None = None
     started_at: datetime = Field(default_factory=utc_now)
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     duration_seconds: float = 0.0
 
     def finalize(self) -> None:

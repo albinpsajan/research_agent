@@ -5,12 +5,11 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 from config.settings import get_settings
 
 
-def setup_logging(settings: Optional[object] = None) -> None:
+def setup_logging(settings: object | None = None) -> None:
     """Configure the root *hackathoniq* logger.
 
     Adds a console handler (always) and a file handler when the log-file

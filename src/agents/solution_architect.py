@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 from config.logging_config import get_logger
@@ -101,7 +98,7 @@ class SolutionArchitectAgent(BaseAgent):
         hackathon: HackathonInput,
         intelligence: HackathonIntelligence,
         *,
-        max_finalists: Optional[int] = None,
+        max_finalists: int | None = None,
         intelligence_context: str = "",
     ) -> FeasibilityReport:
         finalist_limit = max_finalists or self.settings.max_finalists
@@ -124,9 +121,7 @@ class SolutionArchitectAgent(BaseAgent):
             solution.id = f"C{index:02d}"
             solution.domain = problem.domain
             solution.problem_candidate_id = problem.id or ""
-            solution.feasibility_score = self._feasibility(
-                solution, available_hours
-            )
+            solution.feasibility_score = self._feasibility(solution, available_hours)
             if not solution.title:
                 solution.title = problem.title
 
@@ -134,7 +129,9 @@ class SolutionArchitectAgent(BaseAgent):
                 report.rejected_candidates.append(solution)
             else:
                 report.candidates.append(solution)
-            self.repository.save_candidate_solution(session_id, solution.model_dump(mode="json"))
+            self.repository.save_candidate_solution(
+                session_id, solution.model_dump(mode="json")
+            )
 
         report.total_evaluated = len(shortlisted)
         self._save(session_id, "feasibility_report", report)
@@ -191,16 +188,19 @@ class SolutionArchitectAgent(BaseAgent):
         *,
         session_id: str,
         problem: ProblemCandidate,
-        gap: Optional[InnovationGap],
+        gap: InnovationGap | None,
         intelligence: HackathonIntelligence,
         available_hours: float,
         intelligence_context: str,
         theme: str,
     ) -> CandidateSolution:
-        evidence_text = "\n".join(
-            f"- {e.description} | {e.source_url or 'no URL'} | credibility={e.credibility:.2f}"
-            for e in problem.evidence[:6]
-        ) or "- No direct evidence was retrieved."
+        evidence_text = (
+            "\n".join(
+                f"- {e.description} | {e.source_url or 'no URL'} | credibility={e.credibility:.2f}"
+                for e in problem.evidence[:6]
+            )
+            or "- No direct evidence was retrieved."
+        )
         existing_text = ""
         if gap:
             existing_text = "\n".join(
@@ -219,7 +219,7 @@ class SolutionArchitectAgent(BaseAgent):
             existing_text = "(no existing solutions were verifiably identified)"
 
         prompt = f"""Hackathon theme: {theme}
-Problem domain: {problem.domain} / {problem.subdomain or 'general'}
+Problem domain: {problem.domain} / {problem.subdomain or "general"}
 Problem candidate: {problem.title}
 Problem: {problem.description}
 Affected people: {problem.affected_people}
@@ -233,13 +233,13 @@ Existing solutions found:
 {existing_text}
 Real GitHub projects:
 {github_text}
-Innovation classification: {gap.classification.value if gap else 'unknown'}
-Gap: {gap.gap_description if gap else 'unknown'}
-Differentiation potential: {gap.differentiation_potential if gap else 'unknown'}
+Innovation classification: {gap.classification.value if gap else "unknown"}
+Gap: {gap.gap_description if gap else "unknown"}
+Differentiation potential: {gap.differentiation_potential if gap else "unknown"}
 Organiser goals: {intelligence.organizer_goals[:6]}
 Technical restrictions: {intelligence.technical_restrictions[:6]}
 Time available: {available_hours:.1f} hours
-Recent intelligence: {intelligence_context[:1200] or '(none)'}
+Recent intelligence: {intelligence_context[:1200] or "(none)"}
 
 Design ONE refined hackathon solution. It must:
 - solve a specific, evidence-backed problem for named users;
@@ -262,9 +262,7 @@ set should_reject=true and explain why. Do not force a weak candidate."""
             problem_statement=problem.description,
             target_users=result.target_users[:8],
             user_pain_point=result.user_pain_point,
-            supporting_evidence=[
-                e.description for e in problem.evidence[:6]
-            ],
+            supporting_evidence=[e.description for e in problem.evidence[:6]],
             existing_alternatives=[
                 s.name for s in (gap.existing_solutions if gap else [])
             ][:8],
@@ -302,8 +300,12 @@ set should_reject=true and explain why. Do not force a weak candidate."""
                 RiskAssessment(
                     risk_type=r.risk_type,
                     description=r.description,
-                    severity=r.severity if r.severity in {"low", "medium", "high", "critical"} else "medium",
-                    likelihood=r.likelihood if r.likelihood in {"unlikely", "possible", "likely", "certain"} else "possible",
+                    severity=r.severity
+                    if r.severity in {"low", "medium", "high", "critical"}
+                    else "medium",
+                    likelihood=r.likelihood
+                    if r.likelihood in {"unlikely", "possible", "likely", "certain"}
+                    else "possible",
                     mitigation=r.mitigation or None,
                 )
                 for r in result.risks[:10]

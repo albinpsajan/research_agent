@@ -7,10 +7,7 @@ presenting model prose as fact.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from config.logging_config import get_logger
 from config.settings import get_settings
@@ -30,7 +27,7 @@ def _bullets(items: list[str], empty: str = "_None recorded._") -> str:
     return "\n".join(f"- {item}" for item in items) if items else empty
 
 
-def _quote(text: Optional[str], limit: int = 2500) -> str:
+def _quote(text: str | None, limit: int = 2500) -> str:
     return (text or "").strip()[:limit] or "_Not recorded._"
 
 
@@ -41,9 +38,7 @@ def _evaluation_table(evaluations: list[CandidateEvaluation]) -> str:
         "| Rank | Candidate | Domain | Score | Gates | Debate |",
         "|---:|---|---|---:|---|---|",
     ]
-    for evaluation in sorted(
-        evaluations, key=lambda e: e.total_score, reverse=True
-    ):
+    for evaluation in sorted(evaluations, key=lambda e: e.total_score, reverse=True):
         gates = "PASS" if evaluation.all_gates_passed else "FAIL"
         lines.append(
             f"| {evaluation.rank or '-'} | {evaluation.candidate_title[:70]} | "
@@ -53,7 +48,7 @@ def _evaluation_table(evaluations: list[CandidateEvaluation]) -> str:
     return "\n".join(lines)
 
 
-def _score_table(evaluation: Optional[CandidateEvaluation]) -> str:
+def _score_table(evaluation: CandidateEvaluation | None) -> str:
     if not evaluation:
         return "_No winning score breakdown is available._"
     lines = [
@@ -72,7 +67,7 @@ def _score_table(evaluation: Optional[CandidateEvaluation]) -> str:
     return "\n".join(lines)
 
 
-def _gates_table(evaluation: Optional[CandidateEvaluation]) -> str:
+def _gates_table(evaluation: CandidateEvaluation | None) -> str:
     if not evaluation:
         return "_No gate results are available._"
     lines = ["| Mandatory gate | Status | Justification |", "|---|---|---|"]
@@ -86,7 +81,7 @@ def _gates_table(evaluation: Optional[CandidateEvaluation]) -> str:
 class ReportGenerator:
     """Builds, persists and exports the final report."""
 
-    def __init__(self, repository: Optional[Repository] = None) -> None:
+    def __init__(self, repository: Repository | None = None) -> None:
         self.repository = repository or Repository()
         self.settings = get_settings()
 
@@ -97,7 +92,7 @@ class ReportGenerator:
         *,
         continuous_intelligence_note: str = "",
         model_name: str = "",
-        llm_stats: Optional[dict] = None,
+        llm_stats: dict | None = None,
     ) -> FinalReport:
         hackathon = result.input
         intelligence = result.intelligence
@@ -318,7 +313,9 @@ class ReportGenerator:
             hackathon_theme=hackathon.theme,
             hackathon_name=hackathon.name,
             generation_time_seconds=round(result.duration_seconds, 2),
-            total_domains_explored=domain_map.total_domains_explored if domain_map else 0,
+            total_domains_explored=domain_map.total_domains_explored
+            if domain_map
+            else 0,
             total_problems_found=domain_map.total_problems_found if domain_map else 0,
             total_solutions_analyzed=(
                 innovation.total_solutions_found + innovation.total_github_projects
@@ -345,17 +342,28 @@ class ReportGenerator:
             sections=sections,
             evidence_links=evidence_links,
             unresolved_questions=self._unresolved_questions(intelligence, winner),
+            data_freshness=data_freshness,
             limitations=[
-                "Research is limited to free public sources reachable at run time; "
-                "paywalled databases and private company data are not accessed.",
-                "Search APIs may rate-limit or omit results; absence of evidence is "
-                "not proof that a solution does not exist.",
-                "Scores are structured judgements from one local model, not ground "
-                "truth. They are constrained by evidence gates and adversarial review.",
-                "Organiser intentions are partly inferred from public material unless "
-                "official rules were supplied.",
-                "Hackathon outcomes also depend on execution, presentation and judging "
-                "subjectivity; this report does not guarantee a win.",
+                (
+                    "Research is limited to free public sources reachable at run time; "
+                    "paywalled databases and private company data are not accessed."
+                ),
+                (
+                    "Search APIs may rate-limit or omit results; absence of evidence is "
+                    "not proof that a solution does not exist."
+                ),
+                (
+                    "Scores are structured judgements from one local model, not ground "
+                    "truth. They are constrained by evidence gates and adversarial review."
+                ),
+                (
+                    "Organiser intentions are partly inferred from public material unless "
+                    "official rules were supplied."
+                ),
+                (
+                    "Hackathon outcomes also depend on execution, presentation and judging "
+                    "subjectivity; this report does not guarantee a win."
+                ),
             ],
         )
         self._persist(report)
@@ -368,9 +376,9 @@ class ReportGenerator:
     @staticmethod
     def _executive_summary(
         hackathon: HackathonInput,
-        intelligence: Optional[HackathonIntelligence],
-        domain_map: Optional[DomainMap],
-        innovation: Optional[InnovationReport],
+        intelligence: HackathonIntelligence | None,
+        domain_map: DomainMap | None,
+        innovation: InnovationReport | None,
         winner,
     ) -> str:
         if winner.has_winner and winner.winner:
@@ -396,17 +404,19 @@ class ReportGenerator:
             f"{(innovation.total_solutions_found + innovation.total_github_projects) if innovation else 0} "
             "existing solutions and repositories** before cross-domain comparison.\n\n"
             f"**Organiser signal:** "
-            f"{'; '.join((intelligence.organizer_goals[:3] if intelligence else [])) or 'Insufficient verified organiser intelligence.'}\n\n"
+            f"{'; '.join(intelligence.organizer_goals[:3] if intelligence else []) or 'Insufficient verified organiser intelligence.'}\n\n"
             "This report distinguishes verified facts, inferred findings and "
             "speculative opportunities. All external claims retain source links."
         )
 
     @staticmethod
-    def _organizer_section(intelligence: Optional[HackathonIntelligence]) -> str:
+    def _organizer_section(intelligence: HackathonIntelligence | None) -> str:
         if not intelligence:
             return "_No organiser intelligence was produced._"
         organizer = intelligence.organizer
-        verified = _bullets(intelligence.verified_facts, "_No verified facts recorded._")
+        verified = _bullets(
+            intelligence.verified_facts, "_No verified facts recorded._"
+        )
         assumptions = _bullets(intelligence.assumptions, "_No assumptions recorded._")
         return (
             f"**Organiser:** {organizer.name if organizer else 'Unknown'}\n\n"
@@ -426,7 +436,7 @@ class ReportGenerator:
         )
 
     @staticmethod
-    def _goals_section(intelligence: Optional[HackathonIntelligence]) -> str:
+    def _goals_section(intelligence: HackathonIntelligence | None) -> str:
         if not intelligence:
             return "_No organiser goals were inferred._"
         return (
@@ -440,7 +450,7 @@ class ReportGenerator:
         )
 
     @staticmethod
-    def _domains_section(domain_map: Optional[DomainMap]) -> str:
+    def _domains_section(domain_map: DomainMap | None) -> str:
         if not domain_map or not domain_map.domains:
             return "_No domains were discovered._"
         blocks = []
@@ -456,7 +466,7 @@ class ReportGenerator:
         return "\n\n".join(blocks)
 
     @staticmethod
-    def _domain_findings(domain_map: Optional[DomainMap]) -> str:
+    def _domain_findings(domain_map: DomainMap | None) -> str:
         if not domain_map:
             return "_No domain research findings._"
         lines = []
@@ -479,15 +489,18 @@ class ReportGenerator:
         return "\n\n".join(lines)
 
     @staticmethod
-    def _problems_section(domain_map: Optional[DomainMap]) -> str:
+    def _problems_section(domain_map: DomainMap | None) -> str:
         if not domain_map or not domain_map.problem_candidates:
             return "_No problem candidates were discovered._"
         lines = []
         for problem in domain_map.problem_candidates:
-            evidence = "\n".join(
-                f"  - [{e.source_type}] {e.source_url or 'no URL'} — {e.description[:240]}"
-                for e in problem.evidence[:6]
-            ) or "  - No evidence retrieved (gate will fail)."
+            evidence = (
+                "\n".join(
+                    f"  - [{e.source_type}] {e.source_url or 'no URL'} — {e.description[:240]}"
+                    for e in problem.evidence[:6]
+                )
+                or "  - No evidence retrieved (gate will fail)."
+            )
             lines.append(
                 f"### {problem.id}: {problem.title}\n"
                 f"**Domain:** {problem.domain} / {problem.subdomain or 'general'}\n\n"
@@ -505,22 +518,28 @@ class ReportGenerator:
         return "\n\n---\n\n".join(lines)
 
     @staticmethod
-    def _existing_solutions_section(innovation: Optional[InnovationReport]) -> str:
+    def _existing_solutions_section(innovation: InnovationReport | None) -> str:
         if not innovation or not innovation.gaps:
             return "_No existing-solution research was completed._"
         lines = []
         for gap in innovation.gaps:
-            solutions = "\n".join(
-                f"- **{s.name}** ({s.solution_type}) — {s.url or 'no URL'}\n"
-                f"  Solves: {s.what_it_solves or s.description[:300]}\n"
-                f"  Limitations: {'; '.join(s.disadvantages) or 'not documented'}"
-                for s in gap.existing_solutions
-            ) or "- No verified existing solution identified."
-            projects = "\n".join(
-                f"- **{p.name}** — {p.stars} stars, {p.forks} forks, "
-                f"{p.language or 'unknown language'}, active={p.is_active}, {p.url}"
-                for p in gap.github_projects
-            ) or "- No GitHub project identified."
+            solutions = (
+                "\n".join(
+                    f"- **{s.name}** ({s.solution_type}) — {s.url or 'no URL'}\n"
+                    f"  Solves: {s.what_it_solves or s.description[:300]}\n"
+                    f"  Limitations: {'; '.join(s.disadvantages) or 'not documented'}"
+                    for s in gap.existing_solutions
+                )
+                or "- No verified existing solution identified."
+            )
+            projects = (
+                "\n".join(
+                    f"- **{p.name}** — {p.stars} stars, {p.forks} forks, "
+                    f"{p.language or 'unknown language'}, active={p.is_active}, {p.url}"
+                    for p in gap.github_projects
+                )
+                or "- No GitHub project identified."
+            )
             lines.append(
                 f"### Problem {gap.problem_candidate_id}\n"
                 f"**Classification:** {gap.classification.value}\n\n"
@@ -530,7 +549,7 @@ class ReportGenerator:
         return "\n\n".join(lines)
 
     @staticmethod
-    def _gaps_section(innovation: Optional[InnovationReport]) -> str:
+    def _gaps_section(innovation: InnovationReport | None) -> str:
         if not innovation:
             return "_No innovation-gap analysis._"
         return "\n\n".join(
@@ -566,7 +585,7 @@ class ReportGenerator:
         return "\n\n".join(lines)
 
     @staticmethod
-    def _winner_section(winner, solution: Optional[CandidateSolution], problem) -> str:
+    def _winner_section(winner, solution: CandidateSolution | None, problem) -> str:
         if not winner.has_winner or not solution:
             return (
                 "**No winner was selected.**\n\n"
@@ -587,11 +606,14 @@ class ReportGenerator:
     def _importance_section(solution, problem) -> str:
         if not solution:
             return "_No winner to assess._"
-        evidence = "\n".join(
-            f"- {e.description[:400]} — {e.source_url or 'no URL'} "
-            f"(credibility {e.credibility:.2f})"
-            for e in (problem.evidence if problem else [])
-        ) or "_No problem evidence recorded._"
+        evidence = (
+            "\n".join(
+                f"- {e.description[:400]} — {e.source_url or 'no URL'} "
+                f"(credibility {e.credibility:.2f})"
+                for e in (problem.evidence if problem else [])
+            )
+            or "_No problem evidence recorded._"
+        )
         return (
             f"**User pain point:** {_quote(solution.user_pain_point)}\n\n"
             f"**Affected people/organisations:** "
@@ -602,7 +624,7 @@ class ReportGenerator:
         )
 
     @staticmethod
-    def _solution_section(solution: Optional[CandidateSolution]) -> str:
+    def _solution_section(solution: CandidateSolution | None) -> str:
         if not solution:
             return "_No winning solution._"
         return (
@@ -612,7 +634,7 @@ class ReportGenerator:
         )
 
     @staticmethod
-    def _feasibility_section(solution: Optional[CandidateSolution]) -> str:
+    def _feasibility_section(solution: CandidateSolution | None) -> str:
         if not solution:
             return "_No winner to assess._"
         return (
@@ -625,19 +647,25 @@ class ReportGenerator:
         )
 
     @staticmethod
-    def _requirements_section(solution: Optional[CandidateSolution]) -> str:
+    def _requirements_section(solution: CandidateSolution | None) -> str:
         if not solution:
             return "_No winner to assess._"
-        data = "\n".join(
-            f"- [{r.category}] {r.description} — availability={r.availability}, "
-            f"cost={r.cost}, risk={r.risk_level}"
-            for r in solution.data_requirements
-        ) or "- None recorded."
-        api = "\n".join(
-            f"- [{r.category}] {r.description} — availability={r.availability}, "
-            f"cost={r.cost}, risk={r.risk_level}"
-            for r in solution.api_requirements
-        ) or "- None recorded."
+        data = (
+            "\n".join(
+                f"- [{r.category}] {r.description} — availability={r.availability}, "
+                f"cost={r.cost}, risk={r.risk_level}"
+                for r in solution.data_requirements
+            )
+            or "- None recorded."
+        )
+        api = (
+            "\n".join(
+                f"- [{r.category}] {r.description} — availability={r.availability}, "
+                f"cost={r.cost}, risk={r.risk_level}"
+                for r in solution.api_requirements
+            )
+            or "- None recorded."
+        )
         tech = ", ".join(solution.relevant_technologies) or "not specified"
         return (
             f"**Technologies:** {tech}\n\n"
@@ -646,7 +674,7 @@ class ReportGenerator:
         )
 
     @staticmethod
-    def _advantages_section(solution: Optional[CandidateSolution]) -> str:
+    def _advantages_section(solution: CandidateSolution | None) -> str:
         if not solution:
             return "_No winner to assess._"
         return (
@@ -655,35 +683,40 @@ class ReportGenerator:
         )
 
     @staticmethod
-    def _risk_section(solution: Optional[CandidateSolution]) -> str:
+    def _risk_section(solution: CandidateSolution | None) -> str:
         if not solution:
             return "_No winner to assess._"
-        risks = "\n".join(
-            f"- **[{r.severity}/{r.likelihood}] {r.risk_type}:** {r.description} "
-            f"— mitigation: {r.mitigation or 'none stated'}"
-            for r in solution.risks
-        ) or "- No risks recorded (this itself is a warning sign)."
+        risks = (
+            "\n".join(
+                f"- **[{r.severity}/{r.likelihood}] {r.risk_type}:** {r.description} "
+                f"— mitigation: {r.mitigation or 'none stated'}"
+                for r in solution.risks
+            )
+            or "- No risks recorded (this itself is a warning sign)."
+        )
         return f"{risks}\n\n**Mitigation strategies:**\n{_bullets(solution.mitigation_strategies)}"
 
     @staticmethod
     def _alignment_section(
         hackathon: HackathonInput,
-        intelligence: Optional[HackathonIntelligence],
-        solution: Optional[CandidateSolution],
-        evaluation: Optional[CandidateEvaluation],
+        intelligence: HackathonIntelligence | None,
+        solution: CandidateSolution | None,
+        evaluation: CandidateEvaluation | None,
     ) -> str:
         if not solution:
             return "_No winner to assess._"
         relevance = next(
             (
-                s for s in (evaluation.scores if evaluation else [])
+                s
+                for s in (evaluation.scores if evaluation else [])
                 if s.name == "Hackathon theme relevance"
             ),
             None,
         )
         alignment = next(
             (
-                s for s in (evaluation.scores if evaluation else [])
+                s
+                for s in (evaluation.scores if evaluation else [])
                 if s.name == "Organizer and sponsor alignment"
             ),
             None,
@@ -701,18 +734,20 @@ class ReportGenerator:
 
     def _evidence_section(
         self,
-        intelligence: Optional[HackathonIntelligence],
-        domain_map: Optional[DomainMap],
-        innovation: Optional[InnovationReport],
-        feasibility: Optional[FeasibilityReport],
+        intelligence: HackathonIntelligence | None,
+        domain_map: DomainMap | None,
+        innovation: InnovationReport | None,
+        feasibility: FeasibilityReport | None,
     ) -> str:
-        links = self._collect_evidence(intelligence, domain_map, innovation, feasibility)
+        links = self._collect_evidence(
+            intelligence, domain_map, innovation, feasibility
+        )
         return _bullets(links, "_No evidence links recorded._")
 
     @staticmethod
     def _limitations_section(
-        intelligence: Optional[HackathonIntelligence],
-        innovation: Optional[InnovationReport],
+        intelligence: HackathonIntelligence | None,
+        innovation: InnovationReport | None,
         winner,
         llm_stats: dict,
     ) -> str:
@@ -754,9 +789,9 @@ class ReportGenerator:
 
     @staticmethod
     def _winner_solution(
-        evaluation: Optional[CandidateEvaluation],
-        feasibility: Optional[FeasibilityReport],
-    ) -> Optional[CandidateSolution]:
+        evaluation: CandidateEvaluation | None,
+        feasibility: FeasibilityReport | None,
+    ) -> CandidateSolution | None:
         if not evaluation or not feasibility:
             return None
         for candidate in feasibility.candidates:
@@ -766,10 +801,10 @@ class ReportGenerator:
 
     @staticmethod
     def _collect_evidence(
-        intelligence: Optional[HackathonIntelligence],
-        domain_map: Optional[DomainMap],
-        innovation: Optional[InnovationReport],
-        feasibility: Optional[FeasibilityReport],
+        intelligence: HackathonIntelligence | None,
+        domain_map: DomainMap | None,
+        innovation: InnovationReport | None,
+        feasibility: FeasibilityReport | None,
     ) -> list[str]:
         links: list[str] = []
         if intelligence:
@@ -792,7 +827,7 @@ class ReportGenerator:
 
     @staticmethod
     def _unresolved_questions(
-        intelligence: Optional[HackathonIntelligence], winner
+        intelligence: HackathonIntelligence | None, winner
     ) -> list[str]:
         questions: list[str] = []
         if intelligence:

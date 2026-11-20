@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -24,7 +24,9 @@ def normalize_url(url: str) -> str:
     return (url or "").strip().rstrip("/").lower()
 
 
-def allowed_urls(bundle: Optional[SearchBundle], extra: Optional[list[str]] = None) -> set[str]:
+def allowed_urls(
+    bundle: SearchBundle | None, extra: list[str] | None = None
+) -> set[str]:
     """URLs the model is allowed to cite: retrieved evidence plus user input."""
     allowed = {normalize_url(url) for url in (extra or []) if url}
     if bundle:
@@ -44,7 +46,11 @@ def sanitize_model_urls(model: BaseModel, allowed: set[str]) -> list[str]:
         if isinstance(value, BaseModel):
             for field_name in value.__class__.model_fields:
                 current = getattr(value, field_name)
-                if field_name in {"url", "source_url", "website", "link"} and isinstance(current, str) and current:
+                if (
+                    field_name in {"url", "source_url", "website", "link"}
+                    and isinstance(current, str)
+                    and current
+                ):
                     if normalize_url(current) not in allowed:
                         removed.append(current)
                         setattr(value, field_name, None)
@@ -114,10 +120,7 @@ def evidence_from_indices(
 
 
 def word_tokens(text: str) -> set[str]:
-    return {
-        token
-        for token in re.findall(r"[a-z0-9]{4,}", (text or "").lower())
-    }
+    return {token for token in re.findall(r"[a-z0-9]{4,}", (text or "").lower())}
 
 
 def similarity(left: str, right: str) -> float:
@@ -140,7 +143,7 @@ class BaseAgent:
         llm: LLMClientProtocol,
         research: ResearchService,
         repository: Repository,
-        settings: Optional[AgentSettings] = None,
+        settings: AgentSettings | None = None,
     ) -> None:
         self.llm = llm
         self.research = research

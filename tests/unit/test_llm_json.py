@@ -12,9 +12,7 @@ def test_extract_plain_object() -> None:
 
 
 def test_extract_from_code_fence() -> None:
-    assert extract_json('Here you go:\n```json\n{"a": [1, 2]}\n```') == {
-        "a": [1, 2]
-    }
+    assert extract_json('Here you go:\n```json\n{"a": [1, 2]}\n```') == {"a": [1, 2]}
 
 
 def test_extract_from_prose_with_nested_braces() -> None:

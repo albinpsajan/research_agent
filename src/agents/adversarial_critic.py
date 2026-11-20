@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import random
 import re
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -109,7 +108,7 @@ class AdversarialCriticAgent(BaseAgent):
         hackathon: HackathonInput,
         intelligence: HackathonIntelligence,
         *,
-        max_rounds: Optional[int] = None,
+        max_rounds: int | None = None,
     ) -> FinalEvaluationReport:
         problem_by_id = {p.id: p for p in problems}
         gap_by_problem = {g.problem_candidate_id: g for g in gaps}
@@ -126,7 +125,9 @@ class AdversarialCriticAgent(BaseAgent):
             debate = self._debate(
                 session_id, candidate, problem, gap, evaluation, rounds_limit
             )
-            evaluation.debate_adjustment = debate.score_after_debate - debate.score_before_debate
+            evaluation.debate_adjustment = (
+                debate.score_after_debate - debate.score_before_debate
+            )
             evaluation.debate_recommendation = debate.recommendation
             evaluation.calculate_total()
             self.repository.save_evaluation(
@@ -137,7 +138,9 @@ class AdversarialCriticAgent(BaseAgent):
                 is_qualified=evaluation.is_qualified,
                 rank=None,
                 scores_json=json.dumps([s.model_dump() for s in evaluation.scores]),
-                gates_json=json.dumps([g.model_dump() for g in evaluation.quality_gates]),
+                gates_json=json.dumps(
+                    [g.model_dump() for g in evaluation.quality_gates]
+                ),
                 assessment=evaluation.overall_assessment,
             )
             evaluations.append(evaluation)
@@ -188,8 +191,8 @@ class AdversarialCriticAgent(BaseAgent):
         self,
         session_id: str,
         candidate: CandidateSolution,
-        problem: Optional[ProblemCandidate],
-        gap: Optional[InnovationGap],
+        problem: ProblemCandidate | None,
+        gap: InnovationGap | None,
         evaluation: CandidateEvaluation,
         max_rounds: int,
     ) -> DebateHistory:
@@ -294,8 +297,8 @@ class AdversarialCriticAgent(BaseAgent):
     def _critique(
         self,
         candidate: CandidateSolution,
-        problem: Optional[ProblemCandidate],
-        gap: Optional[InnovationGap],
+        problem: ProblemCandidate | None,
+        gap: InnovationGap | None,
         evaluation: CandidateEvaluation,
         prior: list[str],
     ) -> CritiqueLLM:
@@ -313,8 +316,8 @@ Risks: {[r.description for r in candidate.risks]}
 Disadvantages: {candidate.disadvantages}
 Demo plan: {candidate.hackathon_demo_plan}
 Current score: {evaluation.total_score}/100
-Gate failures: {[g.name for g in evaluation.quality_gates if g.status.value != 'passed']}
-Prior debate: {prior or 'none'}
+Gate failures: {[g.name for g in evaluation.quality_gates if g.status.value != "passed"]}
+Prior debate: {prior or "none"}
 
 Act as a hostile but fair hackathon judge. Challenge at least:
 - Is this important and genuinely relevant to the theme?
@@ -357,9 +360,7 @@ invalidates the idea, recommend "reject". Otherwise revise the differentiation
 where the evidence supports a sharper claim and list any newly discovered risks."""
         return self.llm.generate_json(prompt, RebuttalLLM, SYSTEM)
 
-    def _verdict(
-        self, critique: CritiqueLLM, rebuttal: RebuttalLLM
-    ) -> VerdictLLM:
+    def _verdict(self, critique: CritiqueLLM, rebuttal: RebuttalLLM) -> VerdictLLM:
         resolved = sum(1 for r in rebuttal.rebuttals if r.resolved)
         critical = sum(
             1
@@ -375,6 +376,7 @@ where the evidence supports a sharper claim and list any newly discovered risks.
 Rebuttals:
 {[r.model_dump() for r in rebuttal.rebuttals]}
 Architect recommendation: {rebuttal.recommendation}
+Computed status: resolved criticisms count={resolved}, unresolved critical count={critical}
 
 Adjudicate independently. Did the evidence actually answer each material
 criticism? Count resolved items and unresolved critical items. Apply a score
@@ -383,6 +385,7 @@ zero when resolved without changing quality, small positive only when new
 evidence materially strengthens the candidate. Recommend advance, downgrade or
 reject."""
         verdict = self.llm.generate_json(prompt, VerdictLLM, SYSTEM)
+        verdict.unresolved_critical = max(verdict.unresolved_critical, critical)
         if verdict.unresolved_critical > 0 and verdict.score_adjustment > 0:
             verdict.score_adjustment = 0
         if rebuttal.recommendation == "reject" and verdict.recommendation != "reject":
@@ -440,10 +443,10 @@ Problem: {problem.title if problem else candidate.problem_statement[:150]}
 Solution: {candidate.proposed_solution[:700]}
 Differentiation: {candidate.unique_differentiation[:600]}
 Evidence count: {len(problem.evidence) if problem else 0}
-Existing-solution classification: {gap.classification.value if gap else 'unknown'}
-Gap: {gap.gap_description[:400] if gap else ''}
+Existing-solution classification: {gap.classification.value if gap else "unknown"}
+Gap: {gap.gap_description[:400] if gap else ""}
 Rubric score after debate: {evaluation.total_score}/100
-Gates: {'all passed' if evaluation.all_gates_passed else [g.name for g in evaluation.quality_gates if g.status.value != 'passed']}
+Gates: {"all passed" if evaluation.all_gates_passed else [g.name for g in evaluation.quality_gates if g.status.value != "passed"]}
 Strengths: {evaluation.strengths[:4]}
 Weaknesses: {evaluation.weaknesses[:4]}
 Debate recommendation: {evaluation.debate_recommendation}
@@ -466,7 +469,8 @@ comparison."""
         if result.reject_all:
             return WinnerSelection(
                 has_winner=False,
-                rejection_reason=result.rationale or "The independent critic rejected all candidates.",
+                rejection_reason=result.rationale
+                or "The independent critic rejected all candidates.",
                 selection_methodology="Independent critic selection over anonymised qualified finalists.",
                 runner_ups=[],
             )
@@ -482,14 +486,12 @@ comparison."""
                     "declared rather than overriding the quality controls."
                 ),
                 selection_methodology="Independent critic selection with deterministic qualification guard.",
-                runner_ups=sorted(
-                    qualified, key=lambda e: e.total_score, reverse=True
-                )[:3],
+                runner_ups=sorted(qualified, key=lambda e: e.total_score, reverse=True)[
+                    :3
+                ],
             )
 
-        runner_labels = [
-            _label(item) for item in result.runner_up_labels if item
-        ]
+        runner_labels = [_label(item) for item in result.runner_up_labels if item]
         runner_ups = [
             label_map[item]
             for item in runner_labels
@@ -497,7 +499,8 @@ comparison."""
         ][:3]
         if not runner_ups:
             runner_ups = [
-                e for e in sorted(qualified, key=lambda e: e.total_score, reverse=True)
+                e
+                for e in sorted(qualified, key=lambda e: e.total_score, reverse=True)
                 if e.candidate_id != chosen.candidate_id
             ][:3]
 
@@ -523,7 +526,7 @@ comparison."""
 
     @staticmethod
     def _evidence_bundle(
-        problem: Optional[ProblemCandidate], gap: Optional[InnovationGap]
+        problem: ProblemCandidate | None, gap: InnovationGap | None
     ) -> SearchBundle:
         bundle = SearchBundle(query=problem.title if problem else "candidate")
         seen: set[str] = set()
@@ -556,7 +559,7 @@ comparison."""
         return bundle
 
 
-def _label(value: Optional[str]) -> str:
+def _label(value: str | None) -> str:
     """Extract a finalist label (A-J) from strings like "Finalist A" or "A"."""
     text = (value or "").strip().upper()
     match = re.search(r"\b([A-J])\b", text)

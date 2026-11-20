@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from langgraph.graph import END, StateGraph
 
@@ -16,12 +15,9 @@ from src.agents.innovation_research import InnovationResearchAgent
 from src.agents.solution_architect import SolutionArchitectAgent
 from src.database.migrations import initialize_database
 from src.database.repository import Repository
-from src.evaluation.rubric import EvaluationService
 from src.intelligence.service import ContinuousIntelligenceService
-from src.utils.hackathon_time import utc_now
 from src.llm.client import LLMClientProtocol, OllamaClient
 from src.models.candidate import FeasibilityReport
-from src.models.domain import DomainMap
 from src.models.evaluation import FinalEvaluationReport, WinnerSelection
 from src.models.hackathon import HackathonInput
 from src.models.pipeline import PipelineOptions, PipelineResult
@@ -30,6 +26,7 @@ from src.orchestration.state import PipelineState
 from src.reports.generator import ReportGenerator
 from src.research.registry import ResearchService
 from src.storage.manager import StorageManager
+from src.utils.hackathon_time import utc_now
 
 logger = get_logger("orchestration")
 
@@ -41,7 +38,10 @@ STAGES = {
     "domain_discovery": (0.30, "Agent 2 — Dynamic domain and problem discovery"),
     "innovation_research": (0.52, "Agent 3 — Existing solutions and innovation gaps"),
     "solution_architecture": (0.70, "Agent 4 — Solution architecture and feasibility"),
-    "adversarial_evaluation": (0.86, "Agent 5 — Adversarial debate and final evaluation"),
+    "adversarial_evaluation": (
+        0.86,
+        "Agent 5 — Adversarial debate and final evaluation",
+    ),
     "report": (0.96, "Generating the 24-section final report"),
     "finalize": (1.0, "Completed"),
 }
@@ -53,18 +53,20 @@ class HackathonPipeline:
     def __init__(
         self,
         *,
-        llm: Optional[LLMClientProtocol] = None,
-        repository: Optional[Repository] = None,
-        research: Optional[ResearchService] = None,
-        intelligence: Optional[ContinuousIntelligenceService] = None,
-        progress: Optional[ProgressCallback] = None,
+        llm: LLMClientProtocol | None = None,
+        repository: Repository | None = None,
+        research: ResearchService | None = None,
+        intelligence: ContinuousIntelligenceService | None = None,
+        progress: ProgressCallback | None = None,
     ) -> None:
         setup_logging()
         self.settings = get_settings()
         self.repository = repository or Repository()
         self.llm = llm or OllamaClient()
         self.research = research or ResearchService(self.repository)
-        self.intelligence = intelligence or ContinuousIntelligenceService(self.repository)
+        self.intelligence = intelligence or ContinuousIntelligenceService(
+            self.repository
+        )
         self.progress = progress
         self.storage = StorageManager()
         self._snapshot: dict = {}
@@ -77,9 +79,9 @@ class HackathonPipeline:
     def run(
         self,
         hackathon: HackathonInput,
-        options: Optional[PipelineOptions] = None,
+        options: PipelineOptions | None = None,
         *,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> PipelineResult:
         options = options or PipelineOptions(
             max_domains=self.settings.agent.max_domains,
@@ -165,7 +167,7 @@ class HackathonPipeline:
             )
             self._emit("finalize", "Workflow completed", 1.0)
             return result
-        except Exception as exc:  # noqa: BLE001 - report a clean failure to the UI
+        except Exception as exc:
             logger.exception("Pipeline failed")
             self.repository.update_session_status(session_id, "failed")
             self.repository.save_agent_result(
@@ -218,7 +220,7 @@ class HackathonPipeline:
         graph.add_edge("finalize", END)
         return graph.compile()
 
-    def _emit(self, stage: str, message: str, fraction: Optional[float] = None) -> None:
+    def _emit(self, stage: str, message: str, fraction: float | None = None) -> None:
         self._current_stage = stage
         if fraction is None:
             fraction = STAGES.get(stage, (0.0, ""))[0]
@@ -226,7 +228,7 @@ class HackathonPipeline:
         if self.progress:
             try:
                 self.progress(stage, message, fraction)
-            except Exception:  # noqa: BLE001 - UI callbacks must not kill the run
+            except Exception:
                 logger.exception("Progress callback failed")
 
     # ------------------------------------------------------------------
@@ -338,9 +340,7 @@ class HackathonPipeline:
         return {"feasibility": feasibility}
 
     def _adversarial_evaluation(self, state: PipelineState) -> dict:
-        self._emit(
-            "adversarial_evaluation", STAGES["adversarial_evaluation"][1]
-        )
+        self._emit("adversarial_evaluation", STAGES["adversarial_evaluation"][1])
         feasibility = state.get("feasibility")
         domain_map = state.get("domain_map")
         innovation = state.get("innovation_report")
@@ -402,15 +402,9 @@ class HackathonPipeline:
         report = generator.generate(
             result,
             final,
-            continuous_intelligence_note=state.get(
-                "continuous_intelligence_note", ""
-            ),
+            continuous_intelligence_note=state.get("continuous_intelligence_note", ""),
             model_name=getattr(self.llm, "model_name", lambda: "test-model")(),
-            llm_stats=(
-                self.llm.stats.as_dict()
-                if hasattr(self.llm, "stats")
-                else {}
-            ),
+            llm_stats=(self.llm.stats.as_dict() if hasattr(self.llm, "stats") else {}),
         )
         return {"report": report}
 

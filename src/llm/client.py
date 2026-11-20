@@ -10,7 +10,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -42,15 +42,15 @@ class LLMClientProtocol(Protocol):
         self,
         prompt: str,
         schema: type[TModel],
-        system: Optional[str] = None,
-        temperature: Optional[float] = None,
+        system: str | None = None,
+        temperature: float | None = None,
     ) -> TModel: ...
 
     def generate_text(
         self,
         prompt: str,
-        system: Optional[str] = None,
-        temperature: Optional[float] = None,
+        system: str | None = None,
+        temperature: float | None = None,
     ) -> str: ...
 
     def model_name(self) -> str: ...
@@ -148,10 +148,10 @@ def compact_json(payload: Any, limit: int = 12000) -> str:
 class OllamaClient:
     """Synchronous Ollama chat client with schema validation and repair."""
 
-    def __init__(self, settings: Optional[OllamaSettings] = None) -> None:
+    def __init__(self, settings: OllamaSettings | None = None) -> None:
         self.settings = settings or get_settings().ollama
         self.stats = LLMStats()
-        self._resolved_model: Optional[str] = None
+        self._resolved_model: str | None = None
         self._http = httpx.Client(
             base_url=self.settings.base_url,
             timeout=httpx.Timeout(self.settings.timeout, connect=10.0),
@@ -200,7 +200,9 @@ class OllamaClient:
         to have happened in the caller/UI before invocation."""
         logger.info("Pulling Ollama model %s", name)
         with self._http.stream(
-            "POST", "/api/pull", json={"name": name, "stream": True},
+            "POST",
+            "/api/pull",
+            json={"name": name, "stream": True},
             timeout=httpx.Timeout(3600.0, connect=10.0),
         ) as response:
             response.raise_for_status()
@@ -234,7 +236,8 @@ class OllamaClient:
                 "Ollama is running but no models are installed. "
                 f"Run `ollama pull {self.settings.model}`."
             )
-        def matches(candidate: str) -> Optional[str]:
+
+        def matches(candidate: str) -> str | None:
             if candidate in names:
                 return candidate
             base = candidate.split(":")[0]
@@ -266,10 +269,10 @@ class OllamaClient:
     def _chat(
         self,
         prompt: str,
-        system: Optional[str],
-        response_format: Optional[dict[str, Any]],
-        temperature: Optional[float],
-        num_predict: Optional[int],
+        system: str | None,
+        response_format: dict[str, Any] | None,
+        temperature: float | None,
+        num_predict: int | None,
     ) -> str:
         model = self.resolve_model()
         messages: list[dict[str, str]] = []
@@ -317,9 +320,9 @@ class OllamaClient:
     def generate_text(
         self,
         prompt: str,
-        system: Optional[str] = None,
-        temperature: Optional[float] = None,
-        num_predict: Optional[int] = None,
+        system: str | None = None,
+        temperature: float | None = None,
+        num_predict: int | None = None,
     ) -> str:
         return self._chat(prompt, system, None, temperature, num_predict).strip()
 
@@ -327,8 +330,8 @@ class OllamaClient:
         self,
         prompt: str,
         schema: type[TModel],
-        system: Optional[str] = None,
-        temperature: Optional[float] = None,
+        system: str | None = None,
+        temperature: float | None = None,
     ) -> TModel:
         """Generate JSON validated against *schema*, with bounded repair retries.
 
@@ -337,7 +340,7 @@ class OllamaClient:
         accepted as a result.
         """
         json_schema = schema.model_json_schema()
-        last_error: Optional[str] = None
+        last_error: str | None = None
         raw = ""
         for attempt in range(self.settings.max_json_retries + 1):
             instruction = prompt
@@ -348,9 +351,7 @@ class OllamaClient:
                     "Return ONLY corrected JSON matching the schema. "
                     "Do not add commentary."
                 )
-            raw = self._chat(
-                instruction, system, json_schema, temperature, None
-            )
+            raw = self._chat(instruction, system, json_schema, temperature, None)
             try:
                 payload = extract_json(raw)
                 return schema.model_validate(payload)

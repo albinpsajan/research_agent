@@ -1,13 +1,16 @@
 """Pydantic models for dynamic domain discovery."""
+
 from __future__ import annotations
+
 from datetime import datetime
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
+
 from src.utils.hackathon_time import utc_now
 
 
-class DomainRelevance(str, Enum):
+class DomainRelevance(StrEnum):
     PRIMARY = "primary"
     SECONDARY = "secondary"
     INTERDISCIPLINARY = "interdisciplinary"
@@ -16,6 +19,7 @@ class DomainRelevance(str, Enum):
 
 class DiscoveredDomain(BaseModel):
     """A dynamically discovered domain relevant to the hackathon theme."""
+
     name: str
     description: str
     relevance_type: DomainRelevance
@@ -29,20 +33,24 @@ class DiscoveredDomain(BaseModel):
 
 class ProblemEvidence(BaseModel):
     """Evidence supporting the existence of a real-world problem."""
+
     description: str
-    source_url: Optional[str] = None
-    source_type: str = "general"  # "research", "news", "statistics", "government", "industry"
-    retrieved_at: Optional[datetime] = None
+    source_url: str | None = None
+    source_type: str = (
+        "general"  # "research", "news", "statistics", "government", "industry"
+    )
+    retrieved_at: datetime | None = None
     credibility: float = Field(default=0.5, ge=0, le=1)
 
 
 class ProblemCandidate(BaseModel):
     """A discovered real-world problem candidate."""
-    id: Optional[str] = None
+
+    id: str | None = None
     title: str
     description: str
     domain: str
-    subdomain: Optional[str] = None
+    subdomain: str | None = None
     affected_people: list[str] = Field(default_factory=list)
     seriousness: str = "moderate"  # "low", "moderate", "high", "critical"
     evidence: list[ProblemEvidence] = Field(default_factory=list)
@@ -57,6 +65,7 @@ class ProblemCandidate(BaseModel):
 
 class DomainMap(BaseModel):
     """Complete domain discovery results."""
+
     theme: str
     domains: list[DiscoveredDomain] = Field(default_factory=list)
     problem_candidates: list[ProblemCandidate] = Field(default_factory=list)

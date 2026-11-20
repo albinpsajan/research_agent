@@ -79,7 +79,7 @@ def test_full_workflow_selects_one_winner(repository, report_dir: Path) -> None:
     assert repository.get_session_reports(result.session_id)
     assert repository.get_evaluations(result.session_id)
     assert repository.get_debate_history(result.session_id)
-    assert [stage for stage, _ in events][0] == "prepare"
+    assert events[0][0] == "prepare"
     assert events[-1][1] == 1.0
     assert "ProblemListLLM" in llm.calls
     assert "SelectionLLM" in llm.calls

@@ -7,8 +7,6 @@ research.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 from config.logging_config import get_logger
@@ -26,7 +24,6 @@ from src.models.domain import (
     ProblemCandidate,
 )
 from src.models.hackathon import HackathonIntelligence
-from src.research.registry import SearchBundle
 
 logger = get_logger("agents.domain_discovery")
 
@@ -99,18 +96,18 @@ class DomainDiscoveryAgent(BaseAgent):
         intelligence: HackathonIntelligence,
         *,
         intelligence_context: str = "",
-        max_domains: Optional[int] = None,
-        problems_per_domain: Optional[int] = None,
+        max_domains: int | None = None,
+        problems_per_domain: int | None = None,
     ) -> DomainMap:
         domain_limit = max_domains or self.settings.max_domains
         per_domain = problems_per_domain or self.settings.problems_per_domain
         domain_prompt = f"""Hackathon theme: {theme}
-Organiser: {intelligence.organizer.name if intelligence.organizer else 'unknown'}
+Organiser: {intelligence.organizer.name if intelligence.organizer else "unknown"}
 Organiser goals: {intelligence.organizer_goals[:6]}
 Organiser priorities: {intelligence.recurring_priorities[:6]}
 Judging criteria: {[c.criterion for c in intelligence.judging_criteria][:8]}
 Technical restrictions: {intelligence.technical_restrictions[:6]}
-Recent intelligence signals: {intelligence_context[:2000] or '(none)'}
+Recent intelligence signals: {intelligence_context[:2000] or "(none)"}
 
 Discover every meaningfully relevant field for this specific theme. Think
 across disciplines, including non-obvious intersections and emerging fields.
@@ -161,14 +158,23 @@ quantity; do not add filler domains."""
                 (d for d in domain_list.domains if d.name.strip() == domain.name),
                 None,
             )
-            queries = [q.strip() for q in (raw.search_queries if raw else []) if q.strip()]
+            queries = [
+                q.strip() for q in (raw.search_queries if raw else []) if q.strip()
+            ]
             if not queries:
                 queries = [f"{theme} {domain.name} problems"]
             queries = queries[:4]
             bundle = self.research.multi_search(
                 session_id,
                 queries,
-                source_types=["openalex", "crossref", "arxiv", "github", "rss", "hackernews"],
+                source_types=[
+                    "openalex",
+                    "crossref",
+                    "arxiv",
+                    "github",
+                    "rss",
+                    "hackernews",
+                ],
                 limit=4,
                 max_results=14,
             )
@@ -186,7 +192,7 @@ RETRIEVED EVIDENCE (cite these 1-based indices only):
 {evidence_lines(bundle, max_items=14)}
 
 RECENT INTELLIGENCE (optional context, no URL citations needed):
-{intelligence_context[:2000] or '(none)'}
+{intelligence_context[:2000] or "(none)"}
 
 Identify 1-{per_domain} concrete real-world problems in
 this domain that are genuinely relevant to the theme. For each problem:

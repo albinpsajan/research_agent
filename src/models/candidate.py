@@ -1,13 +1,17 @@
 """Pydantic models for solution candidates and feasibility analysis."""
+
 from __future__ import annotations
+
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, Field
+
 from src.utils.hackathon_time import utc_now
 
 
 class TechnicalRequirement(BaseModel):
     """Technical requirement for a solution."""
+
     category: str  # "data", "api", "infrastructure", "library", "hardware"
     description: str
     availability: str = "unknown"  # "available", "limited", "restricted", "unavailable"
@@ -17,16 +21,18 @@ class TechnicalRequirement(BaseModel):
 
 class RiskAssessment(BaseModel):
     """Risk assessment for a candidate solution."""
+
     risk_type: str  # "technical", "practical", "timeline", "scope", "dependency"
     description: str
     severity: str = "medium"  # "low", "medium", "high", "critical"
     likelihood: str = "possible"  # "unlikely", "possible", "likely", "certain"
-    mitigation: Optional[str] = None
+    mitigation: str | None = None
 
 
 class CandidateSolution(BaseModel):
     """A refined candidate solution with feasibility analysis."""
-    id: Optional[str] = None
+
+    id: str | None = None
     title: str = ""
     problem_candidate_id: str
     problem_statement: str
@@ -42,7 +48,7 @@ class CandidateSolution(BaseModel):
     api_requirements: list[TechnicalRequirement] = Field(default_factory=list)
     technical_architecture: str = ""
     development_complexity: str = "medium"  # "low", "medium", "high", "very_high"
-    estimated_hours: Optional[float] = None
+    estimated_hours: float | None = None
     infrastructure_requirements: list[str] = Field(default_factory=list)
     estimated_cost: str = "minimal"
     dependencies: list[str] = Field(default_factory=list)
@@ -53,13 +59,14 @@ class CandidateSolution(BaseModel):
     hackathon_demo_plan: str = ""
     feasibility_score: float = Field(default=0.5, ge=0, le=1)
     is_rejected: bool = False
-    rejection_reason: Optional[str] = None
+    rejection_reason: str | None = None
     domain: str = ""
     confidence: float = Field(default=0.5, ge=0, le=1)
 
 
 class FeasibilityReport(BaseModel):
     """Complete feasibility analysis report."""
+
     candidates: list[CandidateSolution] = Field(default_factory=list)
     rejected_candidates: list[CandidateSolution] = Field(default_factory=list)
     total_evaluated: int = 0

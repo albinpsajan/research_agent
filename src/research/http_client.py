@@ -6,9 +6,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -58,12 +56,12 @@ class CachedResponse:
 class ResearchHttpClient:
     """HTTPX wrapper used by every connector."""
 
-    def __init__(self, settings: Optional[ResearchSettings] = None) -> None:
+    def __init__(self, settings: ResearchSettings | None = None) -> None:
         self.settings = settings or get_settings().research
         self.cache_dir = Path(get_settings().storage.cache_dir) / "http"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._last_request: dict[str, float] = {}
-        self._robots: dict[str, Optional[RobotFileParser]] = {}
+        self._robots: dict[str, RobotFileParser | None] = {}
         self._client = httpx.Client(
             timeout=httpx.Timeout(self.settings.timeout_seconds, connect=10.0),
             headers={
@@ -82,7 +80,7 @@ class ResearchHttpClient:
         digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
         return self.cache_dir / f"{digest}.json"
 
-    def _read_cache(self, url: str, ttl_hours: int) -> Optional[CachedResponse]:
+    def _read_cache(self, url: str, ttl_hours: int) -> CachedResponse | None:
         path = self._cache_path(url)
         if not path.exists():
             return None
@@ -157,14 +155,15 @@ class ResearchHttpClient:
         self,
         url: str,
         *,
-        ttl_hours: Optional[int] = None,
+        ttl_hours: int | None = None,
         use_cache: bool = True,
-        max_bytes: Optional[int] = None,
+        max_bytes: int | None = None,
     ) -> CachedResponse:
         safe_url = validate_public_url(url)
         if use_cache:
             cached = self._read_cache(
-                safe_url, ttl_hours if ttl_hours is not None else self.settings.cache_ttl_hours
+                safe_url,
+                ttl_hours if ttl_hours is not None else self.settings.cache_ttl_hours,
             )
             if cached:
                 return cached
@@ -176,9 +175,7 @@ class ResearchHttpClient:
         try:
             with self._client.stream("GET", safe_url) as response:
                 if response.status_code >= 400:
-                    raise ResearchError(
-                        f"HTTP {response.status_code} for {safe_url}"
-                    )
+                    raise ResearchError(f"HTTP {response.status_code} for {safe_url}")
                 limit = max_bytes or self.settings.max_page_bytes
                 chunks: list[bytes] = []
                 size = 0
@@ -212,9 +209,9 @@ class ResearchHttpClient:
         self,
         url: str,
         *,
-        params: Optional[dict] = None,
+        params: dict | None = None,
         ttl_hours: int = 6,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> dict:
         """JSON GET with explicit query params (cache key includes params)."""
         if params:
@@ -271,7 +268,9 @@ class ResearchHttpClient:
         soup = BeautifulSoup(response.text, "html.parser")
         for tag in soup(["script", "style", "noscript", "svg", "iframe"]):
             tag.decompose()
-        title = clean_text(soup.title.get_text(" ", strip=True), 300) if soup.title else ""
+        title = (
+            clean_text(soup.title.get_text(" ", strip=True), 300) if soup.title else ""
+        )
         for tag in soup(["nav", "footer", "header", "aside", "form"]):
             tag.decompose()
         text = clean_text(soup.get_text("\n", strip=True), 14000)

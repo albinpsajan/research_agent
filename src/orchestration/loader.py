@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Optional
 
 from src.database.repository import Repository
 from src.models.candidate import FeasibilityReport
@@ -16,14 +15,14 @@ from src.models.report import FinalReport
 from src.models.research import InnovationReport
 
 
-def _latest(repository: Repository, session_id: str, agent: str) -> Optional[dict]:
+def _latest(repository: Repository, session_id: str, agent: str) -> dict | None:
     result = repository.get_latest_agent_result(session_id, agent)
     return result.get("result_data") if result else None
 
 
 def load_session_result(
-    session_id: str, repository: Optional[Repository] = None
-) -> Optional[PipelineResult]:
+    session_id: str, repository: Repository | None = None
+) -> PipelineResult | None:
     """Load a persisted run, returning ``None`` if the session is unknown."""
     repository = repository or Repository()
     session = repository.get_session(session_id)
@@ -44,11 +43,19 @@ def load_session_result(
         constraints=session.get("constraints"),
         session_id=session_id,
     )
-    intelligence = _model(HackathonIntelligence, _latest(repository, session_id, "hackathon_intelligence"))
+    intelligence = _model(
+        HackathonIntelligence, _latest(repository, session_id, "hackathon_intelligence")
+    )
     domain_map = _model(DomainMap, _latest(repository, session_id, "domain_discovery"))
-    innovation = _model(InnovationReport, _latest(repository, session_id, "innovation_research"))
-    feasibility = _model(FeasibilityReport, _latest(repository, session_id, "solution_architect"))
-    final = _model(FinalEvaluationReport, _latest(repository, session_id, "adversarial_critic"))
+    innovation = _model(
+        InnovationReport, _latest(repository, session_id, "innovation_research")
+    )
+    feasibility = _model(
+        FeasibilityReport, _latest(repository, session_id, "solution_architect")
+    )
+    final = _model(
+        FinalEvaluationReport, _latest(repository, session_id, "adversarial_critic")
+    )
     report = None
     reports = repository.get_session_reports(session_id)
     if reports:
@@ -78,7 +85,7 @@ def load_session_result(
     return result
 
 
-def _model(model_type, payload: Optional[dict]):
+def _model(model_type, payload: dict | None):
     if not payload:
         return None
     try:

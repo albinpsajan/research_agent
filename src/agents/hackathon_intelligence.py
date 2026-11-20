@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 from config.logging_config import get_logger
@@ -17,7 +15,7 @@ from src.models.hackathon import (
     PreviousProject,
     SponsorProfile,
 )
-from src.research.base import ResearchError, SearchResult
+from src.research.base import ResearchError
 from src.research.registry import SearchBundle
 
 logger = get_logger("agents.hackathon_intelligence")
@@ -38,7 +36,7 @@ class OrganizerLLM(BaseModel):
     mission: str = ""
     ideology: str = ""
     objectives: list[str] = Field(default_factory=list)
-    website: Optional[str] = None
+    website: str | None = None
     source_urls: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.4, ge=0, le=1)
 
@@ -46,8 +44,8 @@ class OrganizerLLM(BaseModel):
 class JudgeLLM(BaseModel):
     name: str
     expertise: list[str] = Field(default_factory=list)
-    organization: Optional[str] = None
-    source_url: Optional[str] = None
+    organization: str | None = None
+    source_url: str | None = None
 
 
 class SponsorLLM(BaseModel):
@@ -55,21 +53,21 @@ class SponsorLLM(BaseModel):
     interests: list[str] = Field(default_factory=list)
     technologies: list[str] = Field(default_factory=list)
     initiatives: list[str] = Field(default_factory=list)
-    source_url: Optional[str] = None
+    source_url: str | None = None
 
 
 class PreviousProjectLLM(BaseModel):
     title: str
     description: str = ""
-    year: Optional[int] = None
-    placement: Optional[str] = None
+    year: int | None = None
+    placement: str | None = None
     technologies: list[str] = Field(default_factory=list)
-    source_url: Optional[str] = None
+    source_url: str | None = None
 
 
 class CriterionLLM(BaseModel):
     criterion: str
-    weight: Optional[float] = None
+    weight: float | None = None
     description: str = ""
 
 
@@ -87,7 +85,7 @@ class HackathonIntelLLM(BaseModel):
     judging_criteria: list[CriterionLLM] = Field(default_factory=list)
     submission_requirements: list[str] = Field(default_factory=list)
     technical_restrictions: list[str] = Field(default_factory=list)
-    time_limit_hours: Optional[float] = None
+    time_limit_hours: float | None = None
     target_participants: str = ""
     expected_outcomes: list[str] = Field(default_factory=list)
     organizer_goals: list[str] = Field(default_factory=list)
@@ -115,8 +113,10 @@ class HackathonIntelligenceAgent(BaseAgent):
         page_urls: list[str] = []
         fetch_notes: list[str] = []
 
-        for label, url in (("official website", hackathon.website_url),
-                           ("rules page", hackathon.rules_url)):
+        for label, url in (
+            ("official website", hackathon.website_url),
+            ("rules page", hackathon.rules_url),
+        ):
             if not url:
                 continue
             try:
@@ -131,12 +131,12 @@ class HackathonIntelligenceAgent(BaseAgent):
                 logger.warning("Failed to fetch %s: %s", url, exc)
 
         scout_prompt = f"""Hackathon theme: {hackathon.theme}
-Hackathon name: {hackathon.name or 'not supplied'}
-Official website: {hackathon.website_url or 'not supplied'}
-Constraints supplied by user: {hackathon.constraints or 'none'}
+Hackathon name: {hackathon.name or "not supplied"}
+Official website: {hackathon.website_url or "not supplied"}
+Constraints supplied by user: {hackathon.constraints or "none"}
 
 Official page excerpts:
-{chr(10).join(official_texts)[:8000] or '(none retrieved)'}
+{chr(10).join(official_texts)[:8000] or "(none retrieved)"}
 
 Identify the most likely organising institution and propose up to 6 concrete
 search queries that would find the organiser's mission, previous editions,
@@ -181,22 +181,22 @@ facts; this is only a search plan."""
         bundle.results = bundle.results[:30]
 
         prompt = f"""Hackathon theme: {hackathon.theme}
-Hackathon name: {hackathon.name or 'not supplied'}
-Official website: {hackathon.website_url or 'not supplied'}
-Rules URL: {hackathon.rules_url or 'not supplied'}
-Deadline: {hackathon.deadline.isoformat() if hackathon.deadline else 'not supplied'}
-User constraints: {hackathon.constraints or 'none'}
+Hackathon name: {hackathon.name or "not supplied"}
+Official website: {hackathon.website_url or "not supplied"}
+Rules URL: {hackathon.rules_url or "not supplied"}
+Deadline: {hackathon.deadline.isoformat() if hackathon.deadline else "not supplied"}
+User constraints: {hackathon.constraints or "none"}
 
 OFFICIAL PAGE EXCERPTS:
-{chr(10).join(official_texts)[:9000] or '(none retrieved)'}
+{chr(10).join(official_texts)[:9000] or "(none retrieved)"}
 
 RETRIEVED EVIDENCE (cite only these URLs):
 {_evidence(bundle)}
 
 RECENT CONTINUOUS INTELLIGENCE (may be irrelevant; use only if relevant):
-{intelligence_context[:3000] or '(none)'}
+{intelligence_context[:3000] or "(none)"}
 
-FETCH NOTES: {fetch_notes or 'none'}
+FETCH NOTES: {fetch_notes or "none"}
 
 Produce the Hackathon Intelligence Report. Determine:
 1. The organiser's real mission, ideology, objectives and recurring priorities.
@@ -206,7 +206,9 @@ Produce the Hackathon Intelligence Report. Determine:
 5. What is verified versus assumed. Include explicit assumptions when evidence is thin.
 Keep lists focused (max 8 items each). Do not invent URLs."""
         result = self.llm.generate_json(prompt, HackathonIntelLLM, SYSTEM)
-        allowed = allowed_urls(bundle, page_urls + [hackathon.website_url or "", hackathon.rules_url or ""])
+        allowed = allowed_urls(
+            bundle, page_urls + [hackathon.website_url or "", hackathon.rules_url or ""]
+        )
         sanitize_model_urls(result, allowed)
 
         research_sources = [r.url for r in bundle.results if r.url]

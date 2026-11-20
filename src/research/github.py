@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from config.logging_config import get_logger
 from config.settings import ResearchSettings, get_settings
@@ -13,11 +12,11 @@ from src.research.http_client import ResearchHttpClient
 logger = get_logger("research.github")
 
 
-def _parse_date(value: Optional[str]) -> Optional[datetime]:
+def _parse_date(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)
     except ValueError:
         return None
 
@@ -30,8 +29,8 @@ class GitHubConnector:
 
     def __init__(
         self,
-        http: Optional[ResearchHttpClient] = None,
-        settings: Optional[ResearchSettings] = None,
+        http: ResearchHttpClient | None = None,
+        settings: ResearchSettings | None = None,
     ) -> None:
         self.settings = settings or get_settings().research
         self.http = http or ResearchHttpClient(self.settings)

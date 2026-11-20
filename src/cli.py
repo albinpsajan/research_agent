@@ -10,7 +10,6 @@ Examples:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
 from datetime import datetime
@@ -23,10 +22,10 @@ from src.database.repository import Repository
 from src.intelligence.service import ContinuousIntelligenceService
 from src.llm.client import LLMError, OllamaClient
 from src.models.hackathon import HackathonInput
-from src.utils.hackathon_time import utc_now
 from src.models.pipeline import PipelineOptions
 from src.orchestration.pipeline import HackathonPipeline
 from src.storage.manager import StorageManager
+from src.utils.hackathon_time import utc_now
 
 
 def _progress(stage: str, message: str, fraction: float) -> None:
@@ -128,7 +127,10 @@ def cmd_research(args: argparse.Namespace) -> int:
             )
         )
     if result.report:
-        path = Path(get_settings().storage.reports_dir) / f"{result.report.metadata.report_id}.md"
+        path = (
+            Path(get_settings().storage.reports_dir)
+            / f"{result.report.metadata.report_id}.md"
+        )
         print(f"Report: {path}")
     print(f"Session: {result.session_id}")
     if args.json_out:

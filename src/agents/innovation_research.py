@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from config.logging_config import get_logger
-from src.agents.base import BaseAgent, evidence_lines, sanitize_model_urls
+from src.agents.base import BaseAgent, evidence_lines
 from src.models.domain import ProblemCandidate
 from src.models.research import (
     ExistingSolution,
@@ -14,7 +14,6 @@ from src.models.research import (
     OpportunityClassification,
     ResearchSource,
 )
-from src.research.registry import SearchBundle
 
 logger = get_logger("agents.innovation_research")
 
@@ -81,7 +80,12 @@ class InnovationResearchAgent(BaseAgent):
                     f"{problem.domain} {problem.subdomain or ''} open source",
                 ],
                 source_types=[
-                    "github", "openalex", "crossref", "arxiv", "hackernews", "rss"
+                    "github",
+                    "openalex",
+                    "crossref",
+                    "arxiv",
+                    "hackernews",
+                    "rss",
                 ],
                 limit=5,
                 max_results=18,
@@ -91,10 +95,10 @@ class InnovationResearchAgent(BaseAgent):
             prompt = f"""Hackathon theme: {theme}
 Problem: {problem.title}
 Description: {problem.description}
-Domain: {problem.domain} / {problem.subdomain or 'general'}
+Domain: {problem.domain} / {problem.subdomain or "general"}
 Affected people: {problem.affected_people}
 Existing-solution hints from discovery: {problem.inadequate_solutions}
-Recent intelligence: {intelligence_context[:1500] or '(none)'}
+Recent intelligence: {intelligence_context[:1500] or "(none)"}
 
 REAL GITHUB REPOSITORIES FOUND ({len(github_results)}) — metadata only, cite via the numbered list below:
 {_github_context(github_results)}
@@ -169,7 +173,9 @@ Requirements:
                         ),
                     )
                 )
-                self.repository.save_existing_solution(session_id, problem.id, existing[-1])
+                self.repository.save_existing_solution(
+                    session_id, problem.id, existing[-1]
+                )
 
             gap = InnovationGap(
                 problem_candidate_id=problem.id or "",
@@ -201,7 +207,9 @@ Requirements:
             report.total_solutions_found += len(existing)
             report.total_github_projects += len(gap.github_projects)
             report.research_papers_reviewed += sum(
-                1 for r in bundle.results if r.source_type in {"arxiv", "openalex", "crossref"}
+                1
+                for r in bundle.results
+                if r.source_type in {"arxiv", "openalex", "crossref"}
             )
 
         self._save(session_id, "innovation_report", report)
