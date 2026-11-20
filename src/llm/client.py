@@ -128,8 +128,13 @@ def extract_json(text: str) -> Any:
                 candidate = cleaned[start : index + 1]
                 try:
                     return json.loads(candidate)
-                except json.JSONDecodeError as exc:
-                    raise LLMOutputError(f"Malformed JSON: {exc}") from exc
+                except json.JSONDecodeError:
+                    # Attempt safe repair of trailing commas common in small LLM outputs
+                    fixed = re.sub(r",\s*([\]}])", r"\1", candidate)
+                    try:
+                        return json.loads(fixed)
+                    except json.JSONDecodeError as exc:
+                        raise LLMOutputError(f"Malformed JSON: {exc}") from exc
     raise LLMOutputError("Unbalanced JSON in model response")
 
 
