@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from config.logging_config import get_logger
 from config.settings import get_settings
@@ -34,6 +34,18 @@ ALL_SOURCE_TYPES = (
     "hackernews",
     "duckduckgo",
 )
+
+
+def _safe_timestamp(dt: datetime | None) -> float:
+    """Safely convert datetime to epoch seconds on all platforms (avoiding Windows pre-1970 OSError)."""
+    if dt is None:
+        return 0.0
+    try:
+        if dt.tzinfo is not None:
+            return (dt - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds()
+        return (dt - datetime(1970, 1, 1)).total_seconds()
+    except Exception:
+        return 0.0
 
 
 @dataclass
@@ -124,7 +136,7 @@ class ConnectorRegistry:
         bundle.results.sort(
             key=lambda r: (
                 -r.reliability,
-                -(r.published_at.timestamp() if r.published_at else 0),
+                -_safe_timestamp(r.published_at),
             )
         )
         bundle.dedupe()
