@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
 
 from config.logging_config import get_logger
 from src.agents.base import BaseAgent
@@ -70,6 +72,13 @@ class SolutionLLM(BaseModel):
     should_reject: bool = False
     rejection_reason: str = ""
     feasibility_confidence: float = Field(default=0.5, ge=0, le=1)
+
+    @field_validator("feasibility_confidence", mode="before")
+    @classmethod
+    def _normalize_confidence(cls, v: Any) -> Any:
+        if isinstance(v, (int, float)) and v > 1:
+            return min(1.0, v / 100.0)
+        return v
 
 
 _COMPLEXITY_SCORE = {"low": 0.95, "medium": 0.72, "high": 0.45, "very_high": 0.2}

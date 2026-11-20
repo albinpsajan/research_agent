@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import random
 import re
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from config.logging_config import get_logger
 from src.agents.base import BaseAgent, evidence_lines
@@ -87,6 +88,13 @@ class SelectionLLM(BaseModel):
     reject_all: bool = False
     rationale: str = ""
     confidence: float = Field(default=0.5, ge=0, le=1)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _normalize_confidence(cls, v: Any) -> Any:
+        if isinstance(v, (int, float)) and v > 1:
+            return min(1.0, v / 100.0)
+        return v
 
 
 class AdversarialCriticAgent(BaseAgent):

@@ -7,7 +7,9 @@ research.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
 
 from config.logging_config import get_logger
 from src.agents.base import (
@@ -48,6 +50,13 @@ class DomainLLM(BaseModel):
     search_queries: list[str] = Field(default_factory=list, max_length=5)
     confidence: float = Field(default=0.5, ge=0, le=1)
 
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _normalize_confidence(cls, v: Any) -> Any:
+        if isinstance(v, (int, float)) and v > 1:
+            return min(1.0, v / 100.0)
+        return v
+
 
 class DomainListLLM(BaseModel):
     reasoning: str = ""
@@ -69,6 +78,13 @@ class ProblemLLM(BaseModel):
     is_generic: bool = False
     generic_reason: str = ""
     confidence: float = Field(default=0.4, ge=0, le=1)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _normalize_confidence(cls, v: Any) -> Any:
+        if isinstance(v, (int, float)) and v > 1:
+            return min(1.0, v / 100.0)
+        return v
 
 
 class ProblemListLLM(BaseModel):

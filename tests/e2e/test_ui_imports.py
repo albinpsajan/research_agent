@@ -27,6 +27,16 @@ def test_ui_modules_import() -> None:
             ui.pages.settings,
         ]
     )
+    assert all(
+        [
+            ui.components.common,
+            ui.pages.history,
+            ui.pages.intelligence,
+            ui.pages.new_research,
+            ui.pages.results,
+            ui.pages.settings,
+        ]
+    )
 
 
 def test_cli_help_runs() -> None:
