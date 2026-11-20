@@ -16,9 +16,24 @@ from src.utils.hackathon_time import utc_now
 
 
 class PipelineOptions(BaseModel):
-    """Runtime knobs exposed to the UI (bounded, never unlimited)."""
+    """Runtime knobs exposed to the UI (bounded research budgets, dynamic discovery)."""
 
-    max_domains: int = Field(default=8, ge=3, le=20)
+    max_domains: int | None = Field(
+        default=None,
+        description="Optional legacy cap. When None, domain discovery is fully dynamic and relevance-driven.",
+    )
+    domain_exploration_budget: int = Field(
+        default=15,
+        ge=4,
+        le=35,
+        description="Exploration budget for domain discovery before stopping.",
+    )
+    min_domain_relevance: float = Field(
+        default=0.45,
+        ge=0.1,
+        le=1.0,
+        description="Minimum relevance score required for domain retention and expansion.",
+    )
     problems_per_domain: int = Field(default=2, ge=1, le=5)
     max_finalists: int = Field(default=5, ge=2, le=10)
     max_debate_rounds: int = Field(default=3, ge=1, le=5)

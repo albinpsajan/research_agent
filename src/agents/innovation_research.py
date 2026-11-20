@@ -14,8 +14,11 @@ from src.models.research import (
     InnovationGap,
     InnovationReport,
     OpportunityClassification,
+    PublicationCategory,
     ResearchSource,
+    VerificationLevel,
 )
+from src.research.evidence_aggregator import EvidenceAggregator
 
 logger = get_logger("agents.innovation_research")
 
@@ -99,6 +102,8 @@ class InnovationResearchAgent(BaseAgent):
                 limit=5,
                 max_results=18,
             )
+            # Ensure problem evidence is enriched with relevant research papers retrieved by Agent 3
+            EvidenceAggregator.aggregate_problem_evidence(problem, bundle.results, min_sources=2)
             github_results = [r for r in bundle.results if r.source_type == "github"]
 
             prompt = f"""Hackathon theme: {theme}
@@ -176,6 +181,8 @@ Requirements:
                             url=source.url,
                             title=source.title,
                             source_type=_source_type(source.source_type),
+                            publication_category=_pub_category(getattr(source, "publication_category", "web_resource")),
+                            verification_level=_ver_level(getattr(source, "verification_level", "metadata_validated")),
                             description=source.snippet[:800],
                             metadata=source.metadata,
                             reliability=source.reliability,
@@ -203,6 +210,8 @@ Requirements:
                         url=r.url,
                         title=r.title,
                         source_type=_source_type(r.source_type),
+                        publication_category=_pub_category(getattr(r, "publication_category", "web_resource")),
+                        verification_level=_ver_level(getattr(r, "verification_level", "metadata_validated")),
                         description=r.snippet[:800],
                         metadata=r.metadata,
                         reliability=r.reliability,
@@ -212,6 +221,8 @@ Requirements:
                 ],
                 confidence=gap_llm.confidence,
             )
+            # Enrich gap summary and differentiation if LLM output was sparse
+            EvidenceAggregator.enrich_gap_summary(gap)
             report.gaps.append(gap)
             report.total_solutions_found += len(existing)
             report.total_github_projects += len(gap.github_projects)
@@ -223,6 +234,20 @@ Requirements:
 
         self._save(session_id, "innovation_report", report)
         return report
+
+
+def _pub_category(value: str) -> PublicationCategory:
+    try:
+        return PublicationCategory(value)
+    except ValueError:
+        return PublicationCategory.WEB_RESOURCE
+
+
+def _ver_level(value: str) -> VerificationLevel:
+    try:
+        return VerificationLevel(value)
+    except ValueError:
+        return VerificationLevel.RETRIEVED_RECORD
 
 
 def _classification(value: str) -> OpportunityClassification:

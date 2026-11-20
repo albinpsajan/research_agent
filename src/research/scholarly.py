@@ -65,6 +65,8 @@ class ArxivConnector:
                     url=entry.get("link", ""),
                     snippet=" ".join(entry.get("summary", "").split())[:900],
                     source_type="arxiv",
+                    publication_category="preprint",
+                    verification_level="metadata_validated",
                     published_at=_parse_iso(entry.get("published")),
                     authors=[a.get("name", "") for a in entry.get("authors", [])][:8],
                     metadata={"arxiv_id": entry.get("id", "")},
@@ -130,6 +132,8 @@ class OpenAlexConnector:
                     url=url,
                     snippet=self._abstract(item.get("abstract_inverted_index")),
                     source_type="openalex",
+                    publication_category="scholarly_metadata",
+                    verification_level="metadata_validated",
                     published_at=_parse_iso(item.get("publication_date")),
                     authors=[
                         a.get("author", {}).get("display_name", "")
@@ -201,6 +205,8 @@ class CrossrefConnector:
                     else "https://www.crossref.org/",
                     snippet=" ".join(abstract.split())[:900],
                     source_type="crossref",
+                    publication_category="scholarly_metadata",
+                    verification_level="metadata_validated",
                     published_at=date_value,
                     authors=[
                         f"{a.get('given', '')} {a.get('family', '')}".strip()

@@ -17,6 +17,7 @@ from src.models.candidate import (
 from src.models.domain import ProblemCandidate
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap, OpportunityClassification
+from src.research.evidence_aggregator import EvidenceAggregator
 
 logger = get_logger("agents.solution_architect")
 
@@ -252,7 +253,11 @@ Recent intelligence: {intelligence_context[:1200] or "(none)"}
 
 Design ONE refined hackathon solution. It must:
 - solve a specific, evidence-backed problem for named users;
-- be genuinely different from the existing solutions above;
+- provide explicit unique_differentiation from the existing solutions above (at least 30 characters);
+- specify concrete open-source relevant_technologies (frameworks, models, libraries);
+- define a concrete technical_architecture (data ingestion, analytics engine, and interface layers);
+- document at least 2 concrete technical/practical risks with clear mitigations;
+- document at least 1 disadvantage and mitigation strategy;
 - be buildable and demonstrable within {available_hours:.1f} hours by a small team;
 - use realistic free/low-cost data and APIs;
 - include a concrete demo plan.
@@ -328,6 +333,8 @@ set should_reject=true and explain why. Do not force a weak candidate."""
             domain=problem.domain,
             confidence=result.feasibility_confidence,
         )
+        # Ensure complete research evidence, technology stack, and differentiation are attached
+        EvidenceAggregator.enrich_candidate_solution(solution, problem, gap, theme=theme)
         return solution
 
     # ------------------------------------------------------------------

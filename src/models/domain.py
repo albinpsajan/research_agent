@@ -28,6 +28,9 @@ class DiscoveredDomain(BaseModel):
     connections_to_theme: list[str] = Field(default_factory=list)
     interdisciplinary_links: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0, le=1)
+    relevance_score: float = Field(default=0.7, ge=0, le=1)
+    is_interdisciplinary_expansion: bool = False
+    expansion_origin: str | None = None
     evidence: list[str] = Field(default_factory=list)
 
 
@@ -71,4 +74,8 @@ class DomainMap(BaseModel):
     problem_candidates: list[ProblemCandidate] = Field(default_factory=list)
     total_domains_explored: int = 0
     total_problems_found: int = 0
+    exploration_budget: int = 15
+    exploration_budget_consumed: int = 0
+    stopping_reason: str = ""
+    diminishing_returns_reached: bool = False
     generated_at: datetime = Field(default_factory=utc_now)

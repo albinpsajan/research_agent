@@ -23,6 +23,7 @@ from src.models.evaluation import (
 )
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap, OpportunityClassification
+from src.research.evidence_aggregator import EvidenceAggregator
 from src.utils.hackathon_time import available_hours, deadline_note
 
 logger = get_logger("evaluation.rubric")
@@ -326,6 +327,7 @@ assessment, strengths and weaknesses. Do not inflate scores."""
         urls = {e.source_url for e in evidence if e.source_url}
         max_credibility = max((e.credibility for e in evidence), default=0.0)
         credible = len(urls) >= 2 and max_credibility >= 0.6
+        gate0_fail = "" if credible else EvidenceAggregator.classify_gate_failure(GATE_NAMES[0], candidate, problem, gap)
         gates.append(
             QualityGate(
                 name=GATE_NAMES[0],
@@ -336,6 +338,7 @@ assessment, strengths and weaknesses. Do not inflate scores."""
                 justification=(
                     f"{len(urls)} distinct evidence URL(s); highest credibility "
                     f"{max_credibility:.2f}."
+                    + (f" [{gate0_fail}]" if gate0_fail else "")
                 ),
                 evidence=sorted(urls)[:8],
             )
@@ -344,12 +347,14 @@ assessment, strengths and weaknesses. Do not inflate scores."""
         existing_count = (
             len(gap.existing_solutions) + len(gap.github_projects) if gap else 0
         )
+        has_summary = bool(gap and gap.evidence_summary and gap.evidence_summary.strip())
         investigated = bool(
             gap
             and gap.classification != OpportunityClassification.INSUFFICIENT_EVIDENCE
             and existing_count > 0
-            and gap.evidence_summary.strip()
+            and has_summary
         )
+        gate1_fail = "" if investigated else EvidenceAggregator.classify_gate_failure(GATE_NAMES[1], candidate, problem, gap)
         gates.append(
             QualityGate(
                 name=GATE_NAMES[1],
@@ -360,6 +365,7 @@ assessment, strengths and weaknesses. Do not inflate scores."""
                 justification=(
                     f"{existing_count} existing solution/repository record(s); "
                     f"classification={gap.classification.value if gap else 'none'}."
+                    + (f" [{gate1_fail}]" if gate1_fail else "")
                 ),
                 evidence=(
                     [s.url for s in gap.existing_solutions if s.url][:8] if gap else []
@@ -377,6 +383,7 @@ assessment, strengths and weaknesses. Do not inflate scores."""
             }
             and len(candidate.unique_differentiation.strip()) >= 30
         )
+        gate2_fail = "" if originality_ok else EvidenceAggregator.classify_gate_failure(GATE_NAMES[2], candidate, problem, gap)
         gates.append(
             QualityGate(
                 name=GATE_NAMES[2],
@@ -387,6 +394,7 @@ assessment, strengths and weaknesses. Do not inflate scores."""
                 justification=(
                     f"Classification: {gap.classification.value if gap else 'none'}; "
                     f"differentiation length: {len(candidate.unique_differentiation)} chars."
+                    + (f" [{gate2_fail}]" if gate2_fail else "")
                 ),
                 evidence=[gap.differentiation_potential]
                 if gap and gap.differentiation_potential
@@ -402,9 +410,11 @@ assessment, strengths and weaknesses. Do not inflate scores."""
         practical = bool(
             candidate.proposed_solution.strip()
             and candidate.technical_architecture.strip()
+            and candidate.estimated_hours
             and candidate.estimated_hours > 0
             and not unavailable
         )
+        gate3_fail = "" if practical else EvidenceAggregator.classify_gate_failure(GATE_NAMES[3], candidate, problem, gap)
         gates.append(
             QualityGate(
                 name=GATE_NAMES[3],
@@ -413,14 +423,19 @@ assessment, strengths and weaknesses. Do not inflate scores."""
                 if practical
                 else QualityGateStatus.FAILED,
                 justification=(
-                    "Solution and architecture are specified."
-                    if practical
-                    else f"Missing architecture/solution or unavailable dependencies: {unavailable[:4]}"
+                    ("Solution and architecture are specified."
+                     if practical
+                     else f"Missing architecture/solution or unavailable dependencies: {unavailable[:4]}")
+                    + (f" [{gate3_fail}]" if gate3_fail else "")
                 ),
             )
         )
 
-        deadline_ok = candidate.estimated_hours <= hours * 1.15 and hours > 0
+        deadline_ok = (
+            candidate.estimated_hours is not None
+            and candidate.estimated_hours <= hours * 1.15
+            and hours > 0
+        )
         gates.append(
             QualityGate(
                 name=GATE_NAMES[4],
@@ -429,7 +444,7 @@ assessment, strengths and weaknesses. Do not inflate scores."""
                 if deadline_ok
                 else QualityGateStatus.FAILED,
                 justification=(
-                    f"Estimated {candidate.estimated_hours:.0f}h vs {hours:.1f}h available. "
+                    f"Estimated {candidate.estimated_hours or 0:.0f}h vs {hours:.1f}h available. "
                     f"{deadline_note(hackathon)}"
                 ),
             )
@@ -442,6 +457,7 @@ assessment, strengths and weaknesses. Do not inflate scores."""
             and len(candidate.mitigation_strategies) >= 1
             and len(mitigated_risks) >= 1
         )
+        gate5_fail = "" if risk_ok else EvidenceAggregator.classify_gate_failure(GATE_NAMES[5], candidate, problem, gap)
         gates.append(
             QualityGate(
                 name=GATE_NAMES[5],
@@ -453,6 +469,7 @@ assessment, strengths and weaknesses. Do not inflate scores."""
                     f"{len(candidate.risks)} risk(s), {len(candidate.disadvantages)} "
                     f"disadvantage(s), {len(candidate.mitigation_strategies)} "
                     f"mitigation(s), {len(mitigated_risks)} mitigated risk(s)."
+                    + (f" [{gate5_fail}]" if gate5_fail else "")
                 ),
             )
         )

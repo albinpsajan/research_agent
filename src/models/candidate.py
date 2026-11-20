@@ -39,7 +39,9 @@ class CandidateSolution(BaseModel):
     target_users: list[str] = Field(default_factory=list)
     user_pain_point: str = ""
     supporting_evidence: list[str] = Field(default_factory=list)
+    supporting_evidence_urls: list[str] = Field(default_factory=list)
     existing_alternatives: list[str] = Field(default_factory=list)
+    existing_solutions_compared: list[str] = Field(default_factory=list)
     identified_gap: str = ""
     proposed_solution: str = ""
     unique_differentiation: str = ""
@@ -62,6 +64,9 @@ class CandidateSolution(BaseModel):
     rejection_reason: str | None = None
     domain: str = ""
     confidence: float = Field(default=0.5, ge=0, le=1)
+    evidence_confidence: float = Field(default=0.5, ge=0, le=1)
+    failure_categories: list[str] = Field(default_factory=list)
+    validation_notes: list[str] = Field(default_factory=list)
 
 
 class FeasibilityReport(BaseModel):

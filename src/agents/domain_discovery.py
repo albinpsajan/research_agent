@@ -26,6 +26,7 @@ from src.models.domain import (
     ProblemCandidate,
 )
 from src.models.hackathon import HackathonIntelligence
+from src.research.evidence_aggregator import EvidenceAggregator
 
 logger = get_logger("agents.domain_discovery")
 
@@ -48,9 +49,10 @@ class DomainLLM(BaseModel):
     connections_to_theme: list[str] = Field(default_factory=list)
     interdisciplinary_links: list[str] = Field(default_factory=list)
     search_queries: list[str] = Field(default_factory=list, max_length=5)
-    confidence: float = Field(default=0.5, ge=0, le=1)
+    confidence: float = Field(default=0.7, ge=0, le=1)
+    relevance_score: float = Field(default=0.75, ge=0, le=1)
 
-    @field_validator("confidence", mode="before")
+    @field_validator("confidence", "relevance_score", mode="before")
     @classmethod
     def _normalize_confidence(cls, v: Any) -> Any:
         if isinstance(v, (int, float)) and v > 1:
@@ -113,38 +115,56 @@ class DomainDiscoveryAgent(BaseAgent):
         *,
         intelligence_context: str = "",
         max_domains: int | None = None,
+        domain_exploration_budget: int | None = None,
+        min_domain_relevance: float | None = None,
         problems_per_domain: int | None = None,
     ) -> DomainMap:
-        domain_limit = max_domains or self.settings.max_domains
+        budget = max_domains or domain_exploration_budget or self.settings.max_domains or 15
+        min_relevance = min_domain_relevance or 0.45
         per_domain = problems_per_domain or self.settings.problems_per_domain
+
         domain_prompt = f"""Hackathon theme: {theme}
-Organiser: {intelligence.organizer.name if intelligence.organizer else "unknown"}
+Organiser: {intelligence.organizer.name if intelligence.organizer else "None specified (general theme exploration)"}
 Organiser goals: {intelligence.organizer_goals[:6]}
 Organiser priorities: {intelligence.recurring_priorities[:6]}
 Judging criteria: {[c.criterion for c in intelligence.judging_criteria][:8]}
 Technical restrictions: {intelligence.technical_restrictions[:6]}
 Recent intelligence signals: {intelligence_context[:2000] or "(none)"}
 
-Discover every meaningfully relevant field for this specific theme. Think
-across disciplines, including non-obvious intersections and emerging fields.
+Discover every meaningfully relevant field, subdomain, and interdisciplinary intersection for this specific theme.
+Do NOT artificially limit the domain count; explore the full thematic opportunity landscape from first principles.
+Think across primary disciplines, operational contexts, and non-obvious intersections.
 Do NOT use a fixed industry list. For each domain:
-- explain precisely why it matters for THIS theme and organiser;
+- explain precisely why it matters for THIS theme;
+- rate relevance_score (0.0 to 1.0) based on genuine thematic connection and research value;
 - list concrete subdomains;
-- list interdisciplinary links;
+- list interdisciplinary links to other fields;
 - propose 2-4 real search queries that would surface credible evidence about
   problems in this domain (include the theme where useful).
-Return between 4 and {domain_limit} domains, ordered by relevance. Quality over
-quantity; do not add filler domains."""
+Return all genuinely relevant domains, ordered from highest to lowest relevance. Quality over quantity; do not add filler domains."""
         domain_list = self.llm.generate_json(domain_prompt, DomainListLLM, SYSTEM)
 
         domains: list[DiscoveredDomain] = []
         seen_names: set[str] = set()
+        diminishing_returns = False
+        stopping_reason = ""
+
         for item in domain_list.domains:
             key = item.name.strip().lower()
             if not key or key in seen_names:
                 continue
-            if any(similarity(item.name, existing) > 0.82 for existing in seen_names):
+            if any(similarity(item.name, existing) > 0.80 for existing in seen_names):
                 continue
+            rel_score = getattr(item, "relevance_score", 0.75)
+            if rel_score < min_relevance:
+                logger.info(
+                    "Skipping low-relevance domain candidate %s (score %.2f < %.2f)",
+                    item.name,
+                    rel_score,
+                    min_relevance,
+                )
+                continue
+
             seen_names.add(key)
             domains.append(
                 DiscoveredDomain(
@@ -156,11 +176,25 @@ quantity; do not add filler domains."""
                     connections_to_theme=item.connections_to_theme[:8],
                     interdisciplinary_links=item.interdisciplinary_links[:8],
                     confidence=item.confidence,
+                    relevance_score=rel_score,
+                    is_interdisciplinary_expansion=False,
                     evidence=[],
                 )
             )
-            if len(domains) >= domain_limit:
+            if len(domains) >= budget:
+                stopping_reason = (
+                    f"Domain exploration stopped: Reached exploration budget limit ({budget} domains)."
+                )
                 break
+
+        if not stopping_reason:
+            diminishing_returns = True
+            stopping_reason = (
+                f"Dynamic exploration completed with {len(domains)} distinct domains. "
+                f"Stopping criteria: all meaningful thematic dimensions captured (relevance >= {min_relevance:.2f}); "
+                "further expansion produced diminishing returns or redundant overlaps."
+            )
+
         if not domains:
             raise AgentError(
                 "The model did not discover any domains. The theme may be too "
@@ -214,7 +248,7 @@ Identify 1-{per_domain} concrete real-world problems in
 this domain that are genuinely relevant to the theme. For each problem:
 - name who is affected (specific people/organisations, not "everyone");
 - state seriousness honestly (low/moderate/high/critical);
-- cite at least one supplied evidence index;
+- cite 2-3 supplied evidence indices (or at least 1) that provide credible empirical support;
 - explain why current solutions are inadequate and what remains overlooked;
 - identify an emerging or future-oriented opportunity with a credible basis;
 - explain the exact connection to the theme;
@@ -253,6 +287,8 @@ Avoid generic problems included only to increase candidate count."""
                     is_generic=item.is_generic,
                     confidence=item.confidence,
                 )
+                # Ensure independent supporting sources from the domain bundle are associated
+                EvidenceAggregator.aggregate_problem_evidence(candidate, bundle.results, min_sources=2)
                 if self._is_duplicate(candidate, problems):
                     continue
                 problems.append(candidate)
@@ -279,6 +315,10 @@ Avoid generic problems included only to increase candidate count."""
             problem_candidates=problems,
             total_domains_explored=len(domains),
             total_problems_found=len(problems),
+            exploration_budget=budget,
+            exploration_budget_consumed=len(domains),
+            stopping_reason=stopping_reason,
+            diminishing_returns_reached=diminishing_returns,
         )
         self._save(session_id, "domain_map", domain_map)
         self.repository.save_domain_map(session_id, domain_map)

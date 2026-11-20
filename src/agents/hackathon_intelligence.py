@@ -17,6 +17,7 @@ from src.models.hackathon import (
     PreviousProject,
     SponsorProfile,
 )
+from src.models.provenance import CategorizedConstraint, ProvenanceCategory
 from src.research.base import ResearchError
 from src.research.registry import SearchBundle
 
@@ -239,21 +240,48 @@ Keep lists focused (max 8 items each). Do not invent URLs."""
                 "organiser intelligence as low-confidence."
             )
 
+        categorized_constraints: list[CategorizedConstraint] = []
+        if hackathon.constraints:
+            for line in hackathon.constraints.splitlines():
+                line = line.strip()
+                if line:
+                    categorized_constraints.append(
+                        CategorizedConstraint(
+                            category=ProvenanceCategory.USER_PROVIDED,
+                            description=line,
+                            is_mandatory=True,
+                            source="user_input",
+                        )
+                    )
+        for restriction in result.technical_restrictions:
+            if restriction.strip():
+                is_official = bool(hackathon.rules_url or hackathon.website_url)
+                cat = ProvenanceCategory.OFFICIAL_HACKATHON if is_official else ProvenanceCategory.AGENT_HYPOTHESIS
+                categorized_constraints.append(
+                    CategorizedConstraint(
+                        category=cat,
+                        description=restriction.strip(),
+                        is_mandatory=is_official,
+                        source="official_rules" if is_official else "agent_hypothesis",
+                    )
+                )
+
+        has_specific_event = bool(hackathon.name or hackathon.website_url or hackathon.rules_url)
+        organizer_profile = None
+        if has_specific_event and (result.organizer.name or organizer_name):
+            organizer_profile = OrganizerProfile(
+                name=result.organizer.name or organizer_name or "Unknown organiser",
+                mission=result.organizer.mission or None,
+                ideology=result.organizer.ideology or None,
+                objectives=result.organizer.objectives,
+                website=result.organizer.website,
+                source_urls=result.organizer.source_urls,
+                confidence=result.organizer.confidence,
+            )
+
         intelligence = HackathonIntelligence(
             hackathon_input=hackathon,
-            organizer=(
-                OrganizerProfile(
-                    name=result.organizer.name or organizer_name or "Unknown organiser",
-                    mission=result.organizer.mission or None,
-                    ideology=result.organizer.ideology or None,
-                    objectives=result.organizer.objectives,
-                    website=result.organizer.website,
-                    source_urls=result.organizer.source_urls,
-                    confidence=result.organizer.confidence,
-                )
-                if (result.organizer.name or organizer_name)
-                else None
-            ),
+            organizer=organizer_profile,
             judges=[
                 JudgeProfile(
                     name=j.name,
@@ -299,6 +327,7 @@ Keep lists focused (max 8 items each). Do not invent URLs."""
             expected_outcomes=result.expected_outcomes[:10],
             organizer_goals=result.organizer_goals[:10],
             recurring_priorities=result.recurring_priorities[:10],
+            categorized_constraints=categorized_constraints,
             verified_facts=result.verified_facts[:20],
             assumptions=assumptions[:20],
             research_sources=research_sources,

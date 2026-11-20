@@ -418,11 +418,26 @@ class ReportGenerator:
             intelligence.verified_facts, "_No verified facts recorded._"
         )
         assumptions = _bullets(intelligence.assumptions, "_No assumptions recorded._")
+
+        constraints_by_cat: dict[str, list[str]] = {}
+        for cc in getattr(intelligence, "categorized_constraints", []):
+            cat_label = cc.category.value.replace("_", " ").title()
+            constraints_by_cat.setdefault(cat_label, []).append(
+                f"{cc.description} {'[MANDATORY]' if cc.is_mandatory else '[OPTIONAL/HYPOTHESIS]'}"
+            )
+
+        constraint_blocks = []
+        for cat_label, items in constraints_by_cat.items():
+            constraint_blocks.append(f"**{cat_label}:**\n{_bullets(items)}")
+        provenance_str = "\n\n".join(constraint_blocks) if constraint_blocks else "_No categorized constraints recorded._"
+
+        org_name = organizer.name if organizer else "None specified (General Theme Research Mode)"
         return (
-            f"**Organiser:** {organizer.name if organizer else 'Unknown'}\n\n"
+            f"**Organiser:** {org_name}\n\n"
             f"**Mission (reported/inferred):** {_quote(organizer.mission if organizer else '', 800)}\n\n"
             f"**Ideology:** {_quote(organizer.ideology if organizer else '', 600)}\n\n"
             f"**Objectives:**\n{_bullets(organizer.objectives if organizer else [])}\n\n"
+            f"**Constraint Provenance:**\n{provenance_str}\n\n"
             f"**Verified facts:**\n{verified}\n\n"
             f"**Assumptions / unverified inferences:**\n{assumptions}\n\n"
             f"**Judges found:** {len(intelligence.judges)} | "
@@ -454,6 +469,9 @@ class ReportGenerator:
         if not domain_map or not domain_map.domains:
             return "_No domains were discovered._"
         blocks = []
+        if domain_map.stopping_reason:
+            blocks.append(f"> **Dynamic Domain Exploration Status:** {domain_map.stopping_reason}")
+
         for domain in domain_map.domains:
             blocks.append(
                 f"### {domain.name} ({domain.relevance_type.value})\n"

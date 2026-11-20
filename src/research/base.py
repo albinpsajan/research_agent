@@ -25,6 +25,8 @@ class SearchResult(BaseModel):
     url: str
     snippet: str = ""
     source_type: str = "web"
+    publication_category: str = "web_resource"
+    verification_level: str = "retrieved_record"
     published_at: datetime | None = None
     authors: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)

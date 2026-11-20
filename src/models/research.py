@@ -23,6 +23,27 @@ class SourceType(StrEnum):
     PATENT = "patent"
 
 
+class PublicationCategory(StrEnum):
+    """Categorization of publication type and academic standing."""
+
+    PREPRINT = "preprint"  # e.g., arXiv (not verified as peer-reviewed unless corroborated)
+    SCHOLARLY_METADATA = "scholarly_metadata"  # e.g., Crossref/OpenAlex DOI record
+    PEER_REVIEWED = "peer_reviewed"  # Explicitly corroborated peer-reviewed publication
+    NEWS_COMMENTARY = "news_commentary"  # RSS bulletins, MIT News, ScienceDaily
+    SOFTWARE_PROJECT = "software_project"  # GitHub repositories / open-source code
+    WEB_RESOURCE = "web_resource"  # General web pages, blogs, discussion threads
+
+
+class VerificationLevel(StrEnum):
+    """Rigorous verification levels distinguishing raw hits from verified claims."""
+
+    RETRIEVED_RECORD = "retrieved_record"  # Raw record returned from search endpoint
+    METADATA_VALIDATED = "metadata_validated"  # Valid DOI / arXiv ID / URL structure confirmed
+    RESOLVED_ACCESSIBLE = "resolved_accessible"  # Resolved and confirmed reachable (HTTP 200)
+    CONTENT_INSPECTED = "content_inspected"  # Abstract, readme, or text content inspected
+    INDEPENDENTLY_CORROBORATED = "independently_corroborated"  # Corroborated by >=2 independent sources
+
+
 class ResearchSource(BaseModel):
     """A tracked research source with provenance."""
 
@@ -31,6 +52,8 @@ class ResearchSource(BaseModel):
     source_type: SourceType
     retrieved_at: datetime = Field(default_factory=utc_now)
     description: str | None = None
+    publication_category: PublicationCategory = PublicationCategory.WEB_RESOURCE
+    verification_level: VerificationLevel = VerificationLevel.RETRIEVED_RECORD
     metadata: dict[str, Any] = Field(default_factory=dict)
     reliability: float = Field(default=0.5, ge=0, le=1)
 

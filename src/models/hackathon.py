@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from src.models.provenance import CategorizedConstraint, ProvenanceCategory
 from src.utils.hackathon_time import utc_now
 
 
@@ -87,6 +88,7 @@ class HackathonIntelligence(BaseModel):
     expected_outcomes: list[str] = Field(default_factory=list)
     organizer_goals: list[str] = Field(default_factory=list)
     recurring_priorities: list[str] = Field(default_factory=list)
+    categorized_constraints: list[CategorizedConstraint] = Field(default_factory=list)
     verified_facts: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     research_sources: list[str] = Field(default_factory=list)

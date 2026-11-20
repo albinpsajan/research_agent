@@ -59,6 +59,8 @@ class RSSConnector:
                         url=link,
                         snippet=summary[:700],
                         source_type="rss",
+                        publication_category="news_commentary",
+                        verification_level="content_inspected",
                         published_at=_parse_feed_date(entry),
                         metadata={"feed": feed_title, "feed_url": feed_url},
                         reliability=self.reliability,
@@ -110,6 +112,8 @@ class WikipediaConnector:
                     url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
                     snippet=snippet,
                     source_type="wikipedia",
+                    publication_category="web_resource",
+                    verification_level="content_inspected",
                     metadata={"pageid": item.get("pageid")},
                     reliability=self.reliability,
                 )
@@ -160,6 +164,8 @@ class HackerNewsConnector:
                         f"Comments: {hit.get('num_comments', 0)}"
                     ),
                     source_type="hackernews",
+                    publication_category="web_resource",
+                    verification_level="content_inspected",
                     published_at=(
                         datetime.fromisoformat(hit["created_at"])
                         if hit.get("created_at")
@@ -211,6 +217,8 @@ class DuckDuckGoConnector:
                     url=abstract_url,
                     snippet=abstract[:900],
                     source_type="duckduckgo",
+                    publication_category="web_resource",
+                    verification_level="retrieved_record",
                     metadata={"source": payload.get("AbstractSource")},
                     reliability=self.reliability,
                 )
@@ -234,6 +242,8 @@ class DuckDuckGoConnector:
                             url=url,
                             snippet=text[:700],
                             source_type="duckduckgo",
+                            publication_category="web_resource",
+                            verification_level="retrieved_record",
                             reliability=self.reliability,
                         )
                     )

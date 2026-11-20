@@ -277,13 +277,16 @@ class HackathonPipeline:
         agent = DomainDiscoveryAgent(
             self.llm, self.research, self.repository, self.settings.agent
         )
+        opts = state["options"]
         domain_map = agent.run(
             state["session_id"],
             state["hackathon"].theme,
             state["intelligence"],
             intelligence_context=state.get("intelligence_context", ""),
-            max_domains=state["options"].max_domains,
-            problems_per_domain=state["options"].problems_per_domain,
+            max_domains=opts.max_domains,
+            domain_exploration_budget=getattr(opts, "domain_exploration_budget", None),
+            min_domain_relevance=getattr(opts, "min_domain_relevance", None),
+            problems_per_domain=opts.problems_per_domain,
         )
         return {"domain_map": domain_map}
 
