@@ -259,3 +259,11 @@ class ResearchService:
                 )
             )
         return projects
+
+    def close(self) -> None:
+        """Close underlying HTTP clients and release resources."""
+        if hasattr(self, "http") and hasattr(self.http, "close"):
+            try:
+                self.http.close()
+            except Exception:
+                pass

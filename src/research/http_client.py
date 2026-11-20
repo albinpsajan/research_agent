@@ -283,6 +283,10 @@ class ResearchHttpClient:
                 clean = href.split("#")[0]
                 if clean not in links and len(links) < max_links:
                     links.append(clean)
+        try:
+            soup.decompose()
+        except Exception:
+            pass
         return PageContent(
             url=url,
             final_url=response.url,

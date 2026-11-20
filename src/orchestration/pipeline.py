@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 from collections.abc import Callable
 
 from langgraph.graph import END, StateGraph
@@ -270,6 +271,8 @@ class HackathonPipeline:
             state["hackathon"],
             intelligence_context=state.get("intelligence_context", ""),
         )
+        del agent
+        gc.collect()
         return {"intelligence": intelligence}
 
     def _domain_discovery(self, state: PipelineState) -> dict:
@@ -288,6 +291,8 @@ class HackathonPipeline:
             min_domain_relevance=getattr(opts, "min_domain_relevance", None),
             problems_per_domain=opts.problems_per_domain,
         )
+        del agent
+        gc.collect()
         return {"domain_map": domain_map}
 
     def _innovation_research(self, state: PipelineState) -> dict:
@@ -312,6 +317,8 @@ class HackathonPipeline:
             theme=state["hackathon"].theme,
             intelligence_context=state.get("intelligence_context", ""),
         )
+        del agent
+        gc.collect()
         return {"innovation_report": report}
 
     def _solution_architecture(self, state: PipelineState) -> dict:
@@ -340,6 +347,8 @@ class HackathonPipeline:
             max_finalists=state["options"].max_finalists,
             intelligence_context=state.get("intelligence_context", ""),
         )
+        del agent
+        gc.collect()
         return {"feasibility": feasibility}
 
     def _adversarial_evaluation(self, state: PipelineState) -> dict:
@@ -379,6 +388,8 @@ class HackathonPipeline:
             state["intelligence"],
             max_rounds=state["options"].max_debate_rounds,
         )
+        del agent
+        gc.collect()
         return {"final_evaluation": final}
 
     def _report(self, state: PipelineState) -> dict:
@@ -413,4 +424,15 @@ class HackathonPipeline:
 
     def _finalize(self, state: PipelineState) -> dict:
         self._emit("finalize", STAGES["finalize"][1], 1.0)
+        if hasattr(self.research, "close"):
+            try:
+                self.research.close()
+            except Exception:
+                pass
+        if hasattr(self.llm, "close"):
+            try:
+                self.llm.close()
+            except Exception:
+                pass
+        gc.collect()
         return {}
