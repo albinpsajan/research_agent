@@ -15,14 +15,9 @@ Verifies:
 
 from __future__ import annotations
 
-from datetime import datetime
-import pytest
-
-from src.evaluation.rubric import EvaluationService, GATE_NAMES
-from src.models.candidate import CandidateSolution, RiskAssessment
+from src.evaluation.rubric import GATE_NAMES
+from src.models.candidate import CandidateSolution
 from src.models.domain import DiscoveredDomain, DomainMap, DomainRelevance, ProblemCandidate, ProblemEvidence
-from src.models.evaluation import QualityGateStatus
-from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.pipeline import PipelineOptions
 from src.models.provenance import CategorizedConstraint, ProvenanceCategory
 from src.models.research import (
@@ -31,13 +26,11 @@ from src.models.research import (
     InnovationGap,
     OpportunityClassification,
     PublicationCategory,
-    ResearchSource,
-    SourceType,
     VerificationLevel,
 )
 from src.research.base import SearchResult
 from src.research.evidence_aggregator import EvidenceAggregator
-from src.research.github import optimize_github_query, GitHubConnector
+from src.research.github import optimize_github_query
 
 
 # ---------------------------------------------------------------------------

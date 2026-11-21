@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from src.models.provenance import CategorizedConstraint, ProvenanceCategory
+from src.models.provenance import CategorizedConstraint
 from src.utils.hackathon_time import utc_now
 
 

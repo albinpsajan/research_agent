@@ -6,7 +6,7 @@ import streamlit as st
 
 from src.knowledge.hackathon_playbook.database import PlaybookDatabase
 from src.knowledge.hackathon_playbook.schema import PlaybookCategory
-from src.research.sources.kerala_india_registry import KeralaIndiaSourceRegistry, SourceCoverageStatus
+from src.research.sources.kerala_india_registry import KeralaIndiaSourceRegistry
 
 
 def render() -> None:
@@ -158,6 +158,10 @@ def render() -> None:
 
         for src in filtered_sources:
             status_color = "#6ee7a8" if src.successfully_queried else "#f5b942"
+            topics_html = " ".join(
+                f"<span style='background:#1e293b;color:#94a3b8;padding:1px 6px;border-radius:3px;font-size:0.75rem;margin-right:4px;'>#{t}</span>"
+                for t in src.topics
+            )
             with st.container():
                 st.markdown(
                     f"""
@@ -185,7 +189,7 @@ def render() -> None:
                             <a href="{src.base_url}" target="_blank" style="color: #38bdf8; text-decoration: none;">🔗 Visit Official Portal: {src.base_url}</a>
                         </div>
                         <div style="margin-top: 6px;">
-                            {' '.join([f'<span style=\"background:#1e293b;color:#94a3b8;padding:1px 6px;border-radius:3px;font-size:0.75rem;margin-right:4px;\">#{t}</span>' for t in src.topics])}
+                            {topics_html}
                         </div>
                     </div>
                     """,

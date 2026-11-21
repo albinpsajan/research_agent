@@ -17,8 +17,6 @@ from src.models.domain import DomainMap
 from src.models.evaluation import CandidateEvaluation, FinalEvaluationReport
 from src.models.hackathon import HackathonInput, HackathonIntelligence, MultiTrackMode
 from src.models.multitrack import (
-    CrossTrackComparisonItem,
-    CrossTrackComparisonResult,
     MultiTrackPipelineResult,
 )
 from src.models.pipeline import PipelineResult

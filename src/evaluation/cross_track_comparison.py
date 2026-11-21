@@ -193,8 +193,6 @@ class CrossTrackComparisonEngine:
         for rank, ci in enumerate(qualifying_items, start=1):
             ci.rank_overall = rank
 
-        ranked_all = qualifying_items + disqualified_items
-
         # --- MODE A: Best Overall Track ---
         overall_winning_track = None
         overall_winning_cand = None

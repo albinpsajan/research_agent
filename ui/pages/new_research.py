@@ -11,7 +11,6 @@ from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
 from src.models.pipeline import PipelineOptions, PipelineResult
 from src.orchestration.pipeline import HackathonPipeline
 from src.research.base import ResearchError, validate_public_url
-from src.storage.manager import StorageManager
 from ui.components.common import get_llm, get_repository, hero, ollama_banner
 
 

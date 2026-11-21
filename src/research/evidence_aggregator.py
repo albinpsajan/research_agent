@@ -7,14 +7,12 @@ transfer, gap summarization, and explicit failure categorization.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from config.logging_config import get_logger
-from src.models.candidate import CandidateSolution, RiskAssessment, TechnicalRequirement
+from src.models.candidate import CandidateSolution, RiskAssessment
 from src.models.domain import ProblemCandidate, ProblemEvidence
 from src.models.research import (
     AdaptabilityClassification,
-    ExistingSolution,
     GlobalToLocalAdaptation,
     InnovationGap,
     ResearchSource,

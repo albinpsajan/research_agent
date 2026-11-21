@@ -15,7 +15,6 @@ import urllib.request
 from typing import Any
 
 from config.logging_config import get_logger
-from src.research.base import ResearchError, SearchResult
 
 logger = get_logger("research.sources.official_connectors")
 

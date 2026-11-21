@@ -26,7 +26,6 @@ from src.models.research import (
     InnovationGap,
     OpportunityClassification,
 )
-from src.research.evidence_aggregator import EvidenceAggregator
 from src.utils.hackathon_time import utc_now
 from tests.fakes import FakeLLM
 

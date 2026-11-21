@@ -21,9 +21,8 @@ from src.intelligence.service import ContinuousIntelligenceService
 from src.llm.client import LLMClientProtocol, OllamaClient
 from src.models.candidate import FeasibilityReport
 from src.models.evaluation import FinalEvaluationReport, WinnerSelection
-from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
+from src.models.hackathon import HackathonInput
 from src.models.multitrack import (
-    CrossTrackComparisonResult,
     MultiTrackPipelineResult,
     TrackResult,
 )

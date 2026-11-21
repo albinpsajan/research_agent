@@ -15,9 +15,6 @@ Verifies:
 
 from __future__ import annotations
 
-import gc
-import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -25,12 +22,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.database.connection import get_db
 from src.database.migrations import initialize_database
 from src.database.repository import Repository
 from src.evaluation.cross_track_comparison import CrossTrackComparisonEngine
-from src.models.candidate import CandidateSolution, FeasibilityReport, TechnicalRequirement
-from src.models.domain import DiscoveredDomain, DomainMap, ProblemCandidate, ProblemEvidence
+from src.models.candidate import CandidateSolution, FeasibilityReport
+from src.models.domain import DomainMap
 from src.models.evaluation import (
     CandidateEvaluation,
     FinalEvaluationReport,
@@ -399,7 +395,7 @@ def run_six_track_acceptance_test() -> None:
     print(f"  • Detected Duplicate: '{dup['candidate_a_title']}' <==> '{dup['candidate_b_title']}'")
     print(f"  • Token Jaccard Similarity: {dup['similarity_score']:.3f} (Threshold = 0.58)")
     print(f"  • Designated Best-Fit Track: '{dup['best_fit_track_name']}' ({dup['best_fit_track_id']})")
-    print(f"  • Resolution Action: Excluded duplicate from non-fitting track contention.")
+    print("  • Resolution Action: Excluded duplicate from non-fitting track contention.")
 
     # 6. CROSS-TRACK EVALUATION: MODE B (Best Idea Per Track)
     # Notice: Reuses the existing track_results without redundant model re-execution!
@@ -417,7 +413,7 @@ def run_six_track_acceptance_test() -> None:
             print(f"      WINNER: {w_cand.title} ({w_eval.total_score:.1f}/100)")
         else:
             print(f"  • [{t.id}] {t.name}:")
-            print(f"      DISQUALIFIED: No qualifying problem statement found for this track.")
+            print("      DISQUALIFIED: No qualifying problem statement found for this track.")
 
     # Assertions for Mode B:
     assert comp_b.per_track_winners["TRK-01"] is not None and comp_b.per_track_winners["TRK-01"].id == "C01-AGRI"
@@ -429,7 +425,7 @@ def run_six_track_acceptance_test() -> None:
     # Verify exact required disqualification message in Mode B rationale
     disqual_msg = "Track 'Education and Assistive Learning': No qualifying problem statement found for this track."
     assert disqual_msg in comp_b.selection_rationale, f"Rationale must contain exact message: '{disqual_msg}'"
-    print(f"\n  >>> MODE B DISQUALIFICATION VERIFIED: Contains required phrasing.")
+    print("\n  >>> MODE B DISQUALIFICATION VERIFIED: Contains required phrasing.")
 
     # 7. Generate Master Multi-Track Reports
     print("\n" + "=" * 80)
@@ -466,6 +462,7 @@ def run_six_track_acceptance_test() -> None:
     master_rep_b = report_gen.generate_multi_track_report(master_res_b)
 
     assert Path(f"data/reports/{master_rep_a.metadata.report_id}.md").exists()
+    assert Path(f"data/reports/{master_rep_b.metadata.report_id}.md").exists()
     print(f"  • Generated Master Report: data/reports/{master_rep_a.metadata.report_id}.md ({len(master_rep_a.sections)} sections)")
     print(f"  • Track Reports Verified: 6 track reports written to data/reports/R-{session_id[:8]}-track-*.md")
 
