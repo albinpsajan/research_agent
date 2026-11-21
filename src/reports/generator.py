@@ -781,7 +781,7 @@ class ReportGenerator:
         links = self._collect_evidence(
             intelligence, domain_map, innovation, feasibility
         )
-        web_bullets = _bullets(links, "_No evidence links recorded._")
+        web_bullets = _bullets(links, "_No external evidence links recorded._")
         doc_section = ""
         if session_id:
             docs = self.repository.list_uploaded_documents(session_id, is_active_only=True)
@@ -790,10 +790,34 @@ class ReportGenerator:
                 for d in docs:
                     doc_lines.append(
                         f"- **{d['filename']}** ({d['file_type'].upper()}, {d['page_count']} page(s), "
-                        f"extraction: `{d['extraction_method']}`) — "
+                        f"type: `{d['document_type']}`, extraction: `{d['extraction_method']}`) — "
                         f"Verifiable Citation: `[Uploaded document: {d['filename']}, Page <N>]`"
                     )
-                doc_section = "\n\n### Uploaded Primary Documents & Provenance Citations\n\n" + "\n".join(doc_lines)
+
+                # Fetch structured extractions for document-derived constraints
+                constraints_lines = []
+                for d in docs:
+                    struct = self.repository.get_document_structured_extraction(d["id"])
+                    if struct and struct.get("data"):
+                        data = struct["data"]
+                        tech_rules = data.get("technical_restrictions", [])
+                        if tech_rules:
+                            constraints_lines.append(f"**From `{d['filename']}`:**")
+                            for r in tech_rules[:5]:
+                                constraints_lines.append(f"  - [Technical Rule] {r}")
+
+                constraints_text = ""
+                if constraints_lines:
+                    constraints_text = "\n\n### Document-Derived Constraints & Rules\n" + "\n".join(constraints_lines)
+
+                epistemic_text = (
+                    "\n\n### Epistemic Provenance Separation\n"
+                    "- **Primary Source Facts:** Grounded directly in uploaded documents via `[Uploaded document: <filename>, Page <N>]` citations.\n"
+                    "- **AI Structural Interpretations:** Architectural designs, interdisciplinary combinations, and feasibility trade-offs from Agents 2 & 4.\n"
+                    "- **External Verified Research:** GitHub repositories, academic preprints, and open datasets discovered independently by Agents 1 & 3."
+                )
+
+                doc_section = "\n\n### Uploaded Primary Documents & Provenance Citations\n\n" + "\n".join(doc_lines) + constraints_text + epistemic_text
         return web_bullets + doc_section
 
     @staticmethod
@@ -1139,13 +1163,34 @@ class ReportGenerator:
 
         # 10. Hardware Resource Efficiency & Execution Metrics
         res_lines = [
-            f"- **Host Machine:** AMD Ryzen 5 8645HS | NVIDIA RTX 3050 Laptop GPU (6 GB VRAM) | 16 GB RAM",
+            "- **Host Machine:** AMD Ryzen 5 8645HS | NVIDIA RTX 3050 Laptop GPU (6 GB VRAM) | 16 GB RAM",
             f"- **Local Model:** {self.settings.ollama.model} hosted locally via Ollama with 100% GPU offloading",
-            f"- **Execution Strategy:** Strict sequential track execution with garbage collection (`gc.collect()`) between turns",
-            f"- **Storage Budget:** Maintained within the agreed 30 GB local quota",
+            "- **Execution Strategy:** Strict sequential track execution with garbage collection (`gc.collect()`) between turns",
+            "- **Storage Budget:** Maintained within the agreed 30 GB local quota",
             f"- **Total Multi-Track Runtime:** {result.duration_seconds:.2f} seconds",
         ]
         sections.append(ReportSection(number=10, title="Hardware Resource Efficiency & Sequential Execution", content="\n".join(res_lines)))
+
+        # 11. Uploaded Primary Documents & Provenance Citations
+        doc_rows = self.repository.list_uploaded_documents(session_id=result.session_id, is_active_only=True)
+        if not doc_rows:
+            doc_rows = self.repository.list_uploaded_documents(is_active_only=True)
+        if doc_rows:
+            doc_items = [
+                f"- **{d['filename']}** ({d['file_type'].upper()}, {d['page_count']} page(s), type: `{d['document_type']}`, extraction: `{d['extraction_method']}`) — Verifiable Citation: `[Uploaded document: {d['filename']}, Page <N>]`"
+                for d in doc_rows
+            ]
+            sections.append(
+                ReportSection(
+                    number=11,
+                    title="Uploaded Primary Documents & Provenance Citations",
+                    content="### Ingested Ground Truth Documents\n\n"
+                    + "\n".join(doc_items)
+                    + "\n\n### Epistemic Grounding\n"
+                    "- **Source Grounding:** Official rules and constraints extracted directly from uploaded files.\n"
+                    "- **Multi-Track Isolation:** Each track researched independently with zero leakage of ideas.\n",
+                )
+            )
 
         evidence_all = []
         for tr in result.track_results.values():

@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from config.logging_config import get_logger
 from config.settings import get_settings
 from src.database.repository import Repository
+from src.knowledge.document_intelligence.auto_configurator import (
+    HackathonAutoConfigurator,
+)
+from src.knowledge.document_intelligence.classifier import DocumentClassifier
+from src.knowledge.document_intelligence.consolidator import DocumentConsolidator
 from src.knowledge.document_intelligence.extractor import (
     DocumentExtractor,
     ExtractionError,
@@ -18,13 +25,24 @@ from src.knowledge.document_intelligence.extractor import (
 from src.knowledge.document_intelligence.models import (
     DocumentSearchHit,
     DocumentType,
+    ExtractedConflict,
+    ExtractedTrack,
     ExtractionMethod,
     ExtractionStatus,
+    MissingInfoStatus,
+    ProvenancedField,
+    ProvenancedItem,
     StructuredHackathonDoc,
     StructuredResearchDoc,
     UploadedDocument,
 )
 from src.llm.client import LLMClientProtocol, OllamaClient
+from src.models.hackathon import HackathonInput, MultiTrackMode
+from src.models.pipeline import PipelineOptions
+
+if TYPE_CHECKING:
+    from src.models.multitrack import MultiTrackPipelineResult
+    from src.models.pipeline import PipelineResult
 
 logger = get_logger("knowledge.document_intelligence.service")
 
@@ -66,6 +84,7 @@ class DocumentIntelligenceService:
             ocr_engine=OCREngine(tesseract_cmd=self.settings.document_intelligence.tesseract_cmd),
             max_pages=self.settings.document_intelligence.max_pages_per_doc,
         )
+        self.classifier = DocumentClassifier(llm=self.llm)
 
     def upload_document(
         self,
@@ -142,6 +161,17 @@ class DocumentIntelligenceService:
             chunk_dicts = [c.model_dump() for c in chunks]
             self.repository.save_document_chunks(chunk_dicts)
 
+            # Auto-classify document if default GENERAL_EVIDENCE was passed
+            if document_type == DocumentType.GENERAL_EVIDENCE and pages:
+                all_text = "\n".join(p.text_content for p in pages[:4])
+                detected_type, conf = self.classifier.classify_document(
+                    filename=safe_name,
+                    full_text=all_text,
+                )
+                if conf >= 0.70:
+                    document_type = detected_type
+                    logger.info("Auto-classified '%s' as %s (confidence: %.2f)", safe_name, detected_type.value, conf)
+
             status = ExtractionStatus.EXTRACTED
             self.repository.update_document_status(
                 doc_id=doc_id,
@@ -213,7 +243,7 @@ class DocumentIntelligenceService:
 
         document_context = "\n\n".join(chunk_texts)[:7500]
 
-        if document_type == DocumentType.OFFICIAL_RULES:
+        if document_type in (DocumentType.OFFICIAL_RULES, DocumentType.EVENT_ANNOUNCEMENT, DocumentType.TRACK_DESCRIPTION):
             prompt = f"""DOCUMENT: {filename}
 {document_context}
 
@@ -229,6 +259,58 @@ Ensure all extracted facts are strictly grounded in the document text."""
                     extracted_facts=[f"Document: {filename} containing {len(chunks)} extracted chunks."],
                     unverified_items=[f"Automatic LLM structuring encountered error: {exc}"],
                 )
+
+            # Ground scalar field provenance with current document filename
+            for f_name in ("hackathon_name", "organizer", "official_website", "theme", "submission_deadline", "event_duration", "start_date", "end_date"):
+                val = getattr(res, f_name, None)
+                if val:
+                    res.provenanced_fields[f_name] = ProvenancedField(
+                        value=str(val),
+                        filename=filename,
+                        page=1,
+                        confidence=0.92,
+                        is_inferred=False,
+                    )
+
+            # Convert tracks to ExtractedTrack if needed and ground filename
+            if not res.extracted_tracks and res.tracks:
+                res.extracted_tracks = [
+                    ExtractedTrack(
+                        name=t.strip(),
+                        source_filename=filename,
+                        source_page=1,
+                        confidence=0.90,
+                    )
+                    for t in res.tracks
+                    if t.strip()
+                ]
+            elif res.extracted_tracks:
+                for t in res.extracted_tracks:
+                    t.source_filename = filename
+                res.tracks = [t.name for t in res.extracted_tracks]
+
+            # Populate list items provenance
+            for cat, items in (
+                ("judging_criteria", res.judging_criteria),
+                ("technical_restrictions", res.technical_restrictions),
+                ("eligibility_requirements", res.eligibility_requirements),
+                ("geographic_restrictions", res.geographic_restrictions),
+                ("required_technologies", res.required_technologies),
+                ("sponsor_requirements", res.sponsor_requirements),
+                ("submission_requirements", res.submission_requirements),
+                ("required_deliverables", res.required_deliverables),
+            ):
+                if items:
+                    res.provenanced_items[cat] = [
+                        ProvenancedItem(
+                            text=str(it),
+                            filename=filename,
+                            page=1,
+                            confidence=0.90,
+                            is_inferred=False,
+                        )
+                        for it in items
+                    ]
 
             self.repository.save_document_structured_extraction(
                 doc_id=doc_id,
@@ -252,6 +334,37 @@ Analyze this research/evidence document. Extract findings, problem definitions, 
                     extracted_facts=[f"Document: {filename} containing {len(chunks)} extracted chunks."],
                     unverified_items=[f"Automatic LLM structuring encountered error: {exc}"],
                 )
+
+            for f_name in ("document_title", "authors_or_institution", "publication_date", "target_geography"):
+                val = getattr(res, f_name, None)
+                if val and f_name not in res.provenanced_fields:
+                    res.provenanced_fields[f_name] = ProvenancedField(
+                        value=str(val),
+                        filename=filename,
+                        page=1,
+                        confidence=0.90,
+                        is_inferred=False,
+                    )
+
+            for cat, items in (
+                ("key_findings", res.key_findings),
+                ("problems_identified", res.problems_identified),
+                ("datasets_and_methodologies", res.datasets_and_methodologies),
+                ("existing_solutions_noted", res.existing_solutions_noted),
+                ("technical_feasibility_insights", res.technical_feasibility_insights),
+                ("limitations_and_gaps", res.limitations_and_gaps),
+            ):
+                if items and cat not in res.provenanced_items:
+                    res.provenanced_items[cat] = [
+                        ProvenancedItem(
+                            text=str(it),
+                            filename=filename,
+                            page=1,
+                            confidence=0.90,
+                            is_inferred=False,
+                        )
+                        for it in items
+                    ]
 
             self.repository.save_document_structured_extraction(
                 doc_id=doc_id,
@@ -388,3 +501,59 @@ Analyze this research/evidence document. Extract findings, problem definitions, 
             document_type=DocumentType(doc["document_type"]),
             session_id=doc.get("session_id"),
         )
+
+    def consolidate_session_documents(
+        self, session_id: str | None = None
+    ) -> tuple[StructuredHackathonDoc, list[ExtractedConflict]]:
+        """Consolidate multiple hackathon profiles into one unified profile with conflict detection."""
+        docs = self.list_documents(session_id=session_id, is_active_only=True)
+        profiles_to_merge: list[tuple[StructuredHackathonDoc, str, DocumentType]] = []
+        for d in docs:
+            struct = self.repository.get_document_structured_extraction(d.id)
+            if struct and struct.get("data"):
+                try:
+                    prof = StructuredHackathonDoc.model_validate(struct["data"])
+                    profiles_to_merge.append((prof, d.filename, d.document_type))
+                except (ValueError, TypeError) as exc:
+                    logger.debug("Failed validating structured hackathon doc for %s: %s", d.filename, exc)
+
+        return DocumentConsolidator.consolidate_hackathon_profiles(profiles_to_merge)
+
+    def auto_configure_hackathon(
+        self,
+        session_id: str | None = None,
+        mode: MultiTrackMode = MultiTrackMode.BEST_OVERALL,
+        user_overrides: dict[str, Any] | None = None,
+    ) -> tuple[HackathonInput | None, MissingInfoStatus, list[ExtractedConflict], StructuredHackathonDoc]:
+        """Automatically builds HackathonInput configuration from all active uploaded documents."""
+        docs = self.list_documents(session_id=session_id, is_active_only=True)
+        profile, _conflicts = self.consolidate_session_documents(session_id=session_id)
+        hackathon_input, status, all_conflicts = HackathonAutoConfigurator.configure_hackathon(
+            profile=profile,
+            documents=docs,
+            multi_track_mode=mode,
+            user_overrides=user_overrides,
+        )
+        return hackathon_input, status, all_conflicts, profile
+
+    def execute_automated_research(
+        self,
+        hackathon_input: HackathonInput,
+        options: PipelineOptions | None = None,
+        session_id: str | None = None,
+        progress_callback: Callable[[str, str, float], None] | None = None,
+    ) -> PipelineResult | MultiTrackPipelineResult:
+        """Execute the complete five-agent HackathonIQ research pipeline automatically."""
+        from src.orchestration.pipeline import HackathonPipeline
+
+        pipeline = HackathonPipeline(
+            repository=self.repository,
+            llm=self.llm,
+            progress=progress_callback,
+        )
+
+        options = options or PipelineOptions()
+
+        if hackathon_input.is_multi_track and hackathon_input.tracks:
+            return pipeline.run_multi_track(hackathon_input, options, session_id=session_id)
+        return pipeline.run(hackathon_input, options, session_id=session_id)

@@ -384,6 +384,62 @@ class FakeLLM:
                 ),
                 confidence=0.7,
             )
+        if name == "StructuredHackathonDoc":
+            from src.knowledge.document_intelligence.models import (
+                ExtractedTrack,
+                ProvenancedField,
+                ProvenancedItem,
+                StructuredHackathonDoc,
+            )
+            return StructuredHackathonDoc(
+                hackathon_name="Kerala Civic Challenge 2026",
+                organizer="Kerala State Planning Board",
+                official_website="https://kcc.kerala.gov.in",
+                theme="Resilient Coastal Infrastructure",
+                tracks=["Estuarine Water Management", "Decentralized Healthcare"],
+                extracted_tracks=[
+                    ExtractedTrack(name="Estuarine Water Management", description="Polder and saline management"),
+                    ExtractedTrack(name="Decentralized Healthcare", description="Rural clinic triage"),
+                ],
+                judging_criteria=["Technical Feasibility 30%", "Local Relevance 30%"],
+                technical_restrictions=["No paid APIs", "Offline first"],
+                submission_deadline="2026-11-30",
+                event_duration="36 hours",
+                provenanced_fields={
+                    "hackathon_name": ProvenancedField(value="Kerala Civic Challenge 2026", filename="test.pdf", page=1, confidence=0.95),
+                    "theme": ProvenancedField(value="Resilient Coastal Infrastructure", filename="test.pdf", page=1, confidence=0.95),
+                    "organizer": ProvenancedField(value="Kerala State Planning Board", filename="test.pdf", page=1, confidence=0.90),
+                    "submission_deadline": ProvenancedField(value="2026-11-30", filename="test.pdf", page=1, confidence=0.90),
+                },
+                provenanced_items={
+                    "judging_criteria": [ProvenancedItem(text="Technical Feasibility 30%", filename="test.pdf", page=1)],
+                    "technical_restrictions": [ProvenancedItem(text="No paid APIs", filename="test.pdf", page=1)],
+                },
+                extracted_facts=["Event organized by Kerala State Planning Board.", "Requires offline operation."],
+            )
+        if name == "StructuredResearchDoc":
+            from src.knowledge.document_intelligence.models import (
+                ProvenancedField,
+                ProvenancedItem,
+                StructuredResearchDoc,
+            )
+            return StructuredResearchDoc(
+                document_title="Canopy Density in Kerala Agro-Ecosystems",
+                authors_or_institution="Kerala Agricultural University",
+                target_geography="Kuttanad, Kerala",
+                key_findings=["Agro-ecological canopy density varies significantly across polders."],
+                problems_identified=["Saline intrusion in Kuttanad paddy fields causes 40% yield drop."],
+                datasets_and_methodologies=["Bhoonidhi multi-spectral satellite imagery"],
+                technical_feasibility_insights=["Offline inference on edge microcontrollers achievable"],
+                provenanced_fields={
+                    "document_title": ProvenancedField(value="Canopy Density in Kerala Agro-Ecosystems", filename="test.pdf", page=1),
+                    "target_geography": ProvenancedField(value="Kuttanad, Kerala", filename="test.pdf", page=1),
+                },
+                provenanced_items={
+                    "problems_identified": [ProvenancedItem(text="Saline intrusion in Kuttanad paddy fields causes 40% yield drop.", filename="test.pdf", page=1)],
+                },
+                extracted_facts=["40% crop yield drop recorded due to seasonal salinity."],
+            )
         raise AssertionError(f"FakeLLM has no response for schema {name}")
 
 

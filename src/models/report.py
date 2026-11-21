@@ -46,6 +46,11 @@ class FinalReport(BaseModel):
     limitations: list[str] = Field(default_factory=list)
     data_freshness: dict[str, str] = Field(default_factory=dict)
 
+    @property
+    def markdown(self) -> str:
+        """Alias for to_markdown."""
+        return self.to_markdown()
+
     def to_markdown(self) -> str:
         """Convert report to markdown format."""
         lines = [f"# HackathonIQ Report: {self.metadata.hackathon_theme}", ""]

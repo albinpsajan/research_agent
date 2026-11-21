@@ -15,11 +15,15 @@ from src.utils.hackathon_time import utc_now
 class DocumentType(StrEnum):
     """Categorization of uploaded documents."""
 
-    OFFICIAL_RULES = "official_rules"  # Hackathon rulebook, official challenge guidelines
-    RESEARCH_PAPER = "research_paper"  # Academic papers, scientific studies, whitepapers
-    TECHNICAL_SPEC = "technical_spec"  # Architecture docs, API specs, developer guides
-    DATASET_DOCUMENTATION = "dataset_documentation"  # Dataset dictionaries, data schema specs
-    GENERAL_EVIDENCE = "general_evidence"  # Newspaper articles, government reports, community surveys
+    OFFICIAL_RULES = "official_rules"              # Hackathon rulebook, official challenge guidelines
+    EVENT_ANNOUNCEMENT = "event_announcement"      # Event posters, brochures, kick-off notices
+    TRACK_DESCRIPTION = "track_description"        # Dedicated problem/track briefs
+    RESEARCH_PAPER = "research_paper"              # Academic papers, scientific studies, whitepapers
+    GOVERNMENT_REPORT = "government_report"        # Policy briefs, state surveys, gazettes
+    DATASET_DOCUMENTATION = "dataset_documentation"# Dataset dictionaries, data schema specs
+    SUPPORTING_MATERIAL = "supporting_material"    # General articles, slide decks, supplemental
+    TECHNICAL_SPEC = "technical_spec"              # Architecture docs, API specs, developer guides
+    GENERAL_EVIDENCE = "general_evidence"          # Fallback general evidence
 
 
 class ExtractionStatus(StrEnum):
@@ -39,6 +43,82 @@ class ExtractionMethod(StrEnum):
     OCR = "ocr"
     HYBRID = "hybrid"
     FALLBACK = "fallback"
+
+
+class ProvenancedField(BaseModel):
+    """A single extracted field with source grounding, confidence, and page reference."""
+
+    value: str | None = None
+    filename: str = ""
+    page: int = 1
+    confidence: float = 1.0
+    is_inferred: bool = False
+    source_excerpt: str | None = None
+
+    def __str__(self) -> str:
+        return self.value or ""
+
+    def citation(self) -> str:
+        if not self.filename:
+            return ""
+        return f"[Uploaded document: {self.filename}, Page {self.page}]"
+
+
+class ProvenancedItem(BaseModel):
+    """An extracted list item with page-level provenance and confidence."""
+
+    text: str
+    filename: str = ""
+    page: int = 1
+    confidence: float = 1.0
+    is_inferred: bool = False
+    source_excerpt: str | None = None
+
+    def __str__(self) -> str:
+        return self.text
+
+    def citation(self) -> str:
+        if not self.filename:
+            return ""
+        return f"[Uploaded document: {self.filename}, Page {self.page}]"
+
+
+class ExtractedTrack(BaseModel):
+    """A discovered track from an uploaded document with description and rules."""
+
+    name: str
+    description: str | None = None
+    track_rules: str | None = None
+    source_filename: str = ""
+    source_page: int = 1
+    confidence: float = 1.0
+    is_inferred: bool = False
+
+    def citation(self) -> str:
+        if not self.source_filename:
+            return ""
+        return f"[Uploaded document: {self.source_filename}, Page {self.source_page}]"
+
+
+class ExtractedConflict(BaseModel):
+    """A detected conflict between uploaded documents."""
+
+    field: str
+    item_a: str
+    source_a: str
+    item_b: str
+    source_b: str
+    explanation: str
+
+
+class MissingInfoStatus(BaseModel):
+    """Audit of essential vs non-essential information extracted from documents."""
+
+    is_ready_for_research: bool = True
+    is_hackathon_event: bool = True
+    missing_essential: list[str] = Field(default_factory=list)
+    missing_optional: list[str] = Field(default_factory=list)
+    suggested_action: str = ""
 
 
 class DocumentChunk(BaseModel):
@@ -99,6 +179,7 @@ class StructuredHackathonDoc(BaseModel):
 
     hackathon_name: str | None = None
     organizer: str | None = None
+    official_website: str | None = None
     theme: str | None = None
     tracks: list[str] = Field(default_factory=list)
     problem_statements: list[str] = Field(default_factory=list)
@@ -107,17 +188,36 @@ class StructuredHackathonDoc(BaseModel):
     submission_requirements: list[str] = Field(default_factory=list)
     important_deadlines: list[str] = Field(default_factory=list)
     event_duration: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    submission_deadline: str | None = None
+    geographic_restrictions: list[str] = Field(default_factory=list)
     technical_restrictions: list[str] = Field(default_factory=list)
     required_technologies: list[str] = Field(default_factory=list)
     sponsor_requirements: list[str] = Field(default_factory=list)
+    required_deliverables: list[str] = Field(default_factory=list)
     available_datasets: list[str] = Field(default_factory=list)
-    geographic_restrictions: list[str] = Field(default_factory=list)
     legal_ethical_constraints: list[str] = Field(default_factory=list)
     evaluation_conditions: list[str] = Field(default_factory=list)
     contact_and_reference_info: list[str] = Field(default_factory=list)
+
+    # Detailed provenanced representations
+    provenanced_fields: dict[str, ProvenancedField] = Field(default_factory=dict)
+    provenanced_items: dict[str, list[ProvenancedItem]] = Field(default_factory=dict)
+    extracted_tracks: list[ExtractedTrack] = Field(default_factory=list)
+    conflicts: list[ExtractedConflict] = Field(default_factory=list)
+
     extracted_facts: list[str] = Field(default_factory=list)
     inferences: list[str] = Field(default_factory=list)
     unverified_items: list[str] = Field(default_factory=list)
+
+    def get_field_provenance(self, field_name: str) -> ProvenancedField | None:
+        """Get provenance record for a specific field."""
+        return self.provenanced_fields.get(field_name)
+
+    def get_items_provenance(self, category: str) -> list[ProvenancedItem]:
+        """Get provenance list for a category."""
+        return self.provenanced_items.get(category, [])
 
 
 class StructuredResearchDoc(BaseModel):
@@ -133,6 +233,10 @@ class StructuredResearchDoc(BaseModel):
     existing_solutions_noted: list[str] = Field(default_factory=list)
     technical_feasibility_insights: list[str] = Field(default_factory=list)
     limitations_and_gaps: list[str] = Field(default_factory=list)
+
+    provenanced_fields: dict[str, ProvenancedField] = Field(default_factory=dict)
+    provenanced_items: dict[str, list[ProvenancedItem]] = Field(default_factory=dict)
+
     extracted_facts: list[str] = Field(default_factory=list)
     inferences: list[str] = Field(default_factory=list)
     unverified_items: list[str] = Field(default_factory=list)
