@@ -18,6 +18,7 @@ from src.models.research import (
     ResearchSource,
     VerificationLevel,
 )
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.research.evidence_aggregator import EvidenceAggregator
 
 logger = get_logger("agents.innovation_research")
@@ -106,6 +107,10 @@ class InnovationResearchAgent(BaseAgent):
             EvidenceAggregator.aggregate_problem_evidence(problem, bundle.results, min_sources=2)
             github_results = [r for r in bundle.results if r.source_type == "github"]
 
+            playbook = HackathonPlaybookService()
+            playbook_entries = playbook.retrieve_for_innovation_research(problem.domain)
+            playbook_guidance = playbook.format_guidance_for_prompt(playbook_entries)
+
             prompt = f"""Hackathon theme: {theme}
 Problem: {problem.title}
 Description: {problem.description}
@@ -113,6 +118,8 @@ Domain: {problem.domain} / {problem.subdomain or "general"}
 Affected people: {problem.affected_people}
 Existing-solution hints from discovery: {problem.inadequate_solutions}
 Recent intelligence: {intelligence_context[:1500] or "(none)"}
+
+{playbook_guidance}
 
 REAL GITHUB REPOSITORIES FOUND ({len(github_results)}) — metadata only, cite via the numbered list below:
 {_github_context(github_results)}

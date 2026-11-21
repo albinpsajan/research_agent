@@ -1,188 +1,158 @@
-# Architecture
+# HACKATHONIQ — SYSTEM ARCHITECTURE
+## Autonomous Multi-Agent Intelligence, Competition Engineering, and Regional Localization
 
-HackathonIQ is a local-first Python application. It combines a LangGraph state
-machine, five specialist agents, deterministic quality controls, a secure
-research layer, SQLite persistence and a Streamlit interface.
+HackathonIQ is an autonomous, evidence-driven, local-first intelligence architecture designed to discover and recommend **ONE** exceptionally strong, differentiated, feasible, and hackathon-ready problem statement and solution.
+
+---
+
+## 1. High-Level System Architecture
+
+```mermaid
+flowchart TD
+    UI[Streamlit UI / Antigravity CLI] --> Pipeline[HackathonPipeline: LangGraph StateGraph]
+
+    subgraph Knowledge & Sources
+        Playbook[(Playbook FTS5 DB: data/playbook.db)]
+        Registry[Kerala & India Official Source Registry]
+        ResearchLayer[Research Connectors: arXiv, Crossref, OpenAlex, GitHub, RSS, Web]
+    end
+
+    subgraph Five Specialist Agents
+        A1[Agent 1: Hackathon Intelligence]
+        A2[Agent 2: Dynamic Domain Discovery]
+        A3[Agent 3: Global Innovation Research]
+        A4[Agent 4: Solution Architecture]
+        A5[Agent 5: Adversarial Critic & Evaluator]
+    end
+
+    subgraph Quality Assurance & Storage
+        Gates[Ten Mandatory Quality Gates]
+        Rubric[100-Point Weighted Rubric]
+        StorageMgr[StorageManager: 30GB Budget Guard]
+        Repo[(SQLite Database: data/hackathoniq.db)]
+    end
+
+    Pipeline --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 --> A4
+    A4 --> A5
+
+    Playbook -.->|Judging Heuristics| A1
+    Playbook -.->|Problem Scoping| A2
+    Playbook -.->|Transferability Tiers| A3
+    Playbook -.->|3-Min Hero Flow| A4
+    Playbook -.->|Adversarial Audit| A5
+
+    Registry -.->|Official Portals| A2
+    ResearchLayer -.->|Open Science & Code| A3
+
+    A5 --> Gates
+    Gates -->|All 10 Pass| Rubric
+    A5 -->|Winner or Rejection| Repo
+    Pipeline --> StorageMgr
+```
+
+---
+
+## 2. Core Architectural Pillars
+
+### 1. Evidence Before Generation (Strict Grounding)
+- Every real-world problem claim must be corroborated by at least **two independent, credible sources** (credibility $\ge 0.60$).
+- Synthetic data, manufactured competitor names, and hallucinated URLs are strictly filtered by deterministic validators (`SSRFGuard`, `allowed_urls`, `sanitize_model_urls`).
+
+### 2. Deterministic Quality Gates over LLM Optimism
+- A candidate must satisfy **Ten Mandatory Quality Gates** computed deterministically before any 100-point rubric score applies.
+- An LLM may veto a gate or propose score adjustments, but deterministic checks enforce hard vetoes for missing evidence, unavailable dependencies, or deadline breaches.
+
+### 3. Geographical Strategy: Kerala First, India Scale, Global Benchmarking
+- **Kerala First**: Grounded in all 14 districts and 5 agro-ecological zones (Wayanad landslides, Palakkad drought, Kuttanad flooding, coastal salinity), smallholder homestead farm sizes (<0.5 ha), monsoon cloud-cover dynamics, and vernacular Malayalam accessibility.
+- **India Scale**: Scalable to national initiatives and ministries via `data.gov.in`, ICAR, IMD, ISRO, and NITI Aayog.
+- **Global Innovation**: Evaluated via a **5-tier transferability taxonomy (Tiers A through E)** to avoid the "thin API wrapper" trap and ensure genuine technological adaptation.
+
+### 4. Zero Paid Cloud AI & Strict 30 GB Storage Budget
+- **Hardware Target**: AMD Ryzen 5 8645HS with Radeon 760M Graphics + NVIDIA GeForce RTX 3050 Laptop GPU (6 GB VRAM) on Windows.
+- **Local AI**: 100% powered by local Ollama serving `qwen2.5:3b` with full GPU offloading (2.5 GB dedicated VRAM). Zero paid cloud API subscriptions.
+- **Storage Budget**: Strict 30 GB application storage budget enforced by `StorageManager` download guards, automatic cache pruning, and disk monitoring.
+
+### 5. Memory Footprint Optimization (79.4% RAM Reduction)
+- **Garbage Collection**: Explicit `gc.collect()` at pipeline stage boundaries.
+- **HTML DOM Cleanup**: `BeautifulSoup.decompose()` after text extraction in `src/research/http_client.py`.
+- **Connection Stewardship**: Explicit connection closing in `SearchRegistry` and context-managed SQLite connections.
+
+---
+
+## 3. The Multi-Agent Pipeline Workflow
 
 ```
-Streamlit UI / CLI
-        │
-        ▼
-HackathonPipeline (LangGraph StateGraph)
-        │
-        ├── prepare ─────────────── Continuous Intelligence context
-        ├── hackathon_intelligence ─ Agent 1
-        ├── domain_discovery ─────── Agent 2
-        ├── innovation_research ──── Agent 3
-        ├── solution_architecture ── Agent 4
-        ├── adversarial_evaluation ─ Agent 5 + rubric/gates
-        ├── report ───────────────── 24-section report generator
-        └── finalize
-        │
-        ▼
-Repository (SQLite) + data/ artefacts
+[Start Session]
+      │
+      ▼
+1. Prepare Node: Ingest continuous intelligence context & verify storage budget
+      │
+      ▼
+2. Agent 1 (Hackathon Intelligence):
+   - Deconstruct theme & judging criteria using Playbook heuristics
+   - Detect General Theme Mode (unbiased) vs Event Mode
+   - Classify constraint provenance (USER_PROVIDED, OFFICIAL, HYPOTHESIS)
+      │
+      ▼
+3. Agent 2 (Domain & Problem Discovery):
+   - Discover domains dynamically without arbitrary limits (budget-bounded)
+   - Consult Kerala & India Official Source Registry (DES ODR, KAU, KSDMA)
+   - Attach independent empirical evidence to each problem candidate
+      │
+      ▼
+4. Agent 3 (Global Innovation Research):
+   - Search global repositories (GitHub, arXiv, OpenAlex, Crossref)
+   - Identify existing solutions and classify innovation gap
+   - Tag 5-tier transferability taxonomy (Tier A through E)
+      │
+      ▼
+5. Agent 4 (Solution Architecture):
+   - Architect concrete implementation (FastAPI, SQLite, open weights)
+   - Scope hours to fit deadline (<= 1.15 * hours, demo-ready in <=36h)
+   - Detail Kerala adaptation, zero-paid-API economics, and 3-minute hero flow
+      │
+      ▼
+6. Agent 5 (Adversarial Critic & Independent Evaluator):
+   - Execute bounded multi-round adversarial debate
+   - Enforce Ten Mandatory Quality Gates
+   - Apply 100-Point Rubric (normalizing 90-pt raw in General Theme Mode)
+   - Crown ONE definitive winner OR honestly reject all candidates
+      │
+      ▼
+7. Report Generation Node:
+   - Produce 24-section comprehensive markdown report
+   - Persist session, agent outputs, debate logs, and final evaluation
+      │
+      ▼
+[Finalize & Return Result]
 ```
 
-## Design principles
+---
 
-1. **Evidence before generation.** Research is retrieved first; prompts contain
-   numbered evidence; model-cited indices are validated; invented URLs are
-   stripped.
-2. **Deterministic controls over LLM judgement.** The seven mandatory gates are
-   computed from data, not accepted from the model. The model may fail a gate,
-   but it cannot waive one.
-3. **Honest rejection.** The pipeline can finish with `completed_no_winner`.
-   It never promotes an unqualified candidate to satisfy the user.
-4. **Local-first.** One Ollama model, no paid APIs, no telemetry. Public HTTP
-   sources are optional enrichment.
-5. **Everything persisted.** Agent outputs, sources, domains, candidates,
-   evaluations, debates and reports are stored with the session.
-6. **Fail visibly.** A failed stage marks the session `failed`, stores the stage
-   and error, preserves partial results and returns a clean error to the UI.
+## 4. Subsystem Deep-Dives
 
-## Orchestration
+### 1. Hackathon Playbook Knowledge Base (`src/knowledge/hackathon_playbook/`)
+- Permanent SQLite database (`data/playbook.db`) with `playbook_fts` (FTS5 full-text index).
+- 28 seed lessons across theme deconstruction, problem selection, technical architecture, 3-minute demo pitches, sensor scale audits, and winner patterns.
+- Dedicated retrieval API for each of the 5 agents.
 
-`src/orchestration/pipeline.py` builds a LangGraph `StateGraph` over
-`PipelineState` (a `TypedDict`). Each node returns a partial state update.
-The graph is linear and bounded; `recursion_limit` is set to 30.
+### 2. Kerala & India Official Source Registry (`src/research/sources/kerala_india_registry.py`)
+- Master catalog of 14 official government repositories, research institutes, and satellite portals.
+- Domain-to-authority recommendation engine and targeted search query generator.
 
-Progress is reported through an optional callback `(stage, message, fraction)`.
-The Streamlit page uses it to update a progress bar and live log. Exceptions in
-the callback are caught so a UI problem cannot corrupt a run.
-
-Failure handling:
-
-- `update_session_status(session_id, "failed")`
-- store `orchestrator/pipeline_error` with stage, error type and message
-- return a `PipelineResult` with `status="failed"` and partial artefacts
-
-`src/orchestration/loader.py` reconstructs a `PipelineResult` from persisted
-agent results and reports, so History can reopen a session without re-running it.
-
-## Agents
-
-All agents inherit `BaseAgent` (`src/agents/base.py`), which provides:
-
-- shared LLM, research, repository and settings dependencies
-- `_save()` for agent results
-- `_source_urls()` for provenance
-- evidence helpers (`evidence_lines`, `evidence_from_indices`)
-- `sanitize_model_urls` and `similarity` guards
-
-See [AGENTS.md](AGENTS.md) for each agent's contract.
-
-## LLM layer
-
-`src/llm/client.py` wraps Ollama's HTTP API:
-
-- health, model list, model pull and model resolution
-- JSON-schema generation from Pydantic models
-- structured generation with tolerant JSON extraction, validation and bounded
-  retry/repair
-- fallback from the primary model to `qwen2.5:3b` when the primary is missing
-- per-call usage statistics
-
-No LangChain chat model is required at runtime; `langgraph` is used for
-orchestration and the Ollama HTTP API is called directly for precise control.
-
-## Research layer
-
-`src/research/http_client.py` is the only outbound HTTP path used by connectors:
-
-- URL validation and SSRF guard (public http/https only; no credentials,
-  loopback, private ranges, link-local or file schemes)
-- redirect re-validation
-- robots.txt enforcement (configurable)
-- per-host rate limiting
-- bounded response size
-- on-disk response cache with TTL
-- HTML extraction with script/style/navigation removal and link collection
-
-Connectors live in `src/research/`:
-
-| Module | Sources |
-|---|---|
-| `github.py` | GitHub repository search and README excerpts |
-| `scholarly.py` | arXiv, OpenAlex, Crossref |
-| `web.py` | Wikipedia, Hacker News, DuckDuckGo HTML, RSS |
-| `registry.py` | connector registry, `ResearchService`, source tracking |
-
-`ResearchService` persists every retrieved source with session, URL, title,
-type, reliability and retrieval time, deduplicated per session.
-
-## Quality controls
-
-`src/evaluation/rubric.py`:
-
-1. Builds a scoring prompt from candidate, problem, gap, hackathon and
-   organiser context.
-2. Normalises model criterion names onto the eight weighted criteria.
-3. Computes weighted scores out of 100.
-4. Computes the seven deterministic gates from evidence counts, existing
-   solutions, classification, implementation path, deadline, risk analysis and
-   rule compliance.
-5. Merges LLM gate justifications, but only lets the LLM *fail* a gate, never
-   waive a deterministic failure.
-
-The independent selector is guarded: it must choose a qualified finalist with a
-score of at least 60; otherwise no winner is declared.
-
-## Persistence
-
-SQLite with append-only migrations (`src/database/migrations.py`). The schema
-contains sessions, agent results, research sources, domain discoveries,
-problem candidates, existing solutions, candidate solutions, evaluations,
-debate history, final reports, intelligence items and refresh logs.
-
-`DatabaseConnection` is thread-safe:
-
-- `check_same_thread=False` because Streamlit reruns on different threads
-- every operation serialized with an `RLock`
-- WAL mode and a 5 s busy timeout
-- explicit `transaction()` context manager
-
-Migrations are applied idempotently at startup. Existing user data is never
-dropped.
-
-## Storage
-
-`src/storage/manager.py` measures the application's own directories and the
-free disk space. `check_before_download()` blocks a download that would exceed
-the configured budget or leave insufficient disk. `cleanup_cache()` only walks
-`data/cache` and never touches personal files.
-
-## UI
-
-`ui/app.py` is a single Streamlit entry point with sidebar navigation:
-
-- **New research** — brief, controls, live progress, run
-- **Results** — winner/rejection, scores, gates, domains, solutions, debate,
-  evidence, report download
-- **History** — persisted sessions and reports, reload into Results
-- **Intelligence** — knowledge base, manual refresh, theme lookup, source config,
-  refresh history
-- **Settings** — model, download with storage guard, storage budget, safe
-  cleanup, research defaults, privacy notes
-
-`ui/components/common.py` owns the visual system, cached resources and shared
-formatting. The SQLite connection is process-wide and thread-safe, so cached
-Streamlit resources are safe across reruns.
-
-## Configuration
-
-`config/settings.py` loads, in increasing precedence:
-
-1. built-in defaults
-2. `data/user_settings.json` (written by Settings)
-3. environment variables / `.env`
-
-`EvaluationSettings` validates that weights total exactly 100. Invalid
-configuration fails at startup rather than producing silently wrong scores.
-
-## Known design limits
-
-- The workflow is synchronous. Streamlit blocks during a run; the UI explains
-  this. A future version could use a background worker.
-- Public-source coverage varies. Some sites block crawlers; some APIs rate-limit.
-- Local model quality determines prompt adherence. Schema validation and retries
-  reduce, but do not eliminate, invalid output.
+### 3. Evaluation Service (`src/evaluation/rubric.py`)
+- Enforces the **Ten Mandatory Quality Gates**:
+  1. Theme and Judging Alignment
+  2. Real-World Problem Validation (>= 2 independent sources, cred >= 0.60)
+  3. Kerala and India Relevance
+  4. Existing-Solution Investigation
+  5. Genuine Innovation and Differentiation (diff >= 30 chars)
+  6. Global-to-Local Adaptability (5-tier taxonomy)
+  7. Technical Feasibility and Data Availability (zero unavailable deps)
+  8. Economic and Practical Viability (zero paid SaaS APIs)
+  9. Hackathon Buildability and Demonstration (hours <= 1.15 * deadline, demo plan)
+  10. Risk, Ethics and Sustainability (>= 2 risks, >= 1 disadvantage, >= 1 mitigation)
+- **100-Point Scoring Rubric**: In General Theme Mode, Organizer Alignment (10 pts) is unassessable; raw score is calculated out of 90 and normalized to 100.

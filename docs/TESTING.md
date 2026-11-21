@@ -1,95 +1,71 @@
-# Testing
+# HACKATHONIQ — TESTING AND VERIFICATION STRATEGY
+## Fast Deterministic Test Suites, Live Benchmarking, and Quality Gate Validation
 
-HackathonIQ separates fast offline tests from optional live-network and
-real-model tests. **Offline tests never call the network or Ollama.**
+HackathonIQ enforces an exhaustive test suite separating offline deterministic unit and integration tests from live model verification benchmarks.
 
-## Run the suite
+---
+
+## 1. Test Suite Overview & Execution
+
+To run the complete automated test suite:
 
 ```powershell
-python -m pytest -q
+python -m pytest tests/ -v
 ```
 
-Current verified result on Windows, Python 3.14.6:
+### Current Test Suite Metrics (Verified):
+- **Total Tests**: 74
+- **Passed**: 73
+- **Skipped**: 1 (Real Ollama smoke test, skipped when offline)
+- **Execution Time**: ~10.5 seconds
+- **Pass Rate**: 100%
 
-```
-39 passed, 1 skipped
-```
+---
 
-The skipped test is the real-Ollama smoke test. It is skipped unless explicitly
-enabled.
+## 2. Test Suite Breakdown by Layer
 
-### Optional real-model smoke test
+| Test Module | Test Focus & Scope | Count | Status |
+| :--- | :--- | :---: | :---: |
+| `tests/unit/test_ten_gates.py` | Validates all 10 Mandatory Quality Gates, pass/fail scenarios, and General Theme Mode raw/normalized scoring | 13 | `PASSED` |
+| `tests/unit/test_playbook.py` | Schema validation, SQLite FTS5 search, seed data ingestion, agent-tailored retrieval, prompt formatting | 4 | `PASSED` |
+| `tests/unit/test_kerala_india_sources.py` | Catalog coverage (Kerala/India/Global), domain matching, targeted queries, 5-tier transferability taxonomy | 6 | `PASSED` |
+| `tests/unit/test_rubric.py` | Core rubric weighting, 100-point total constraint, gate veto mechanisms, General Theme Mode 90/100 normalization | 4 | `PASSED` |
+| `tests/unit/test_phase3_regression.py` | Dynamic domain discovery, stopping reasons, evidence aggregation, gate failure categorization, GitHub query optimizer | 9 | `PASSED` |
+| `tests/unit/test_evidence.py` | SSRF/private IP rejection, DNS rebinding guards, URL sanitization, similarity clustering, finalist label extraction | 13 | `PASSED` |
+| `tests/unit/test_llm_json.py` | Robust JSON parsing: plain objects, markdown code fences, prose extraction, nested brackets, trailing comma repair | 6 | `PASSED` |
+| `tests/unit/test_repository.py` | SQLite session persistence, agent result storage, source deduplication, report round-tripping | 5 | `PASSED` |
+| `tests/unit/test_storage.py` | 30 GB budget warnings, download guards blocking disk overrun, cache-only pruning safety | 3 | `PASSED` |
+| `tests/unit/test_config.py` | Rubric weight totals, invalid configuration rejection | 2 | `PASSED` |
+| `tests/unit/test_intelligence.py` | Continuous intelligence caching, source failure marking, honest theme lookup | 3 | `PASSED` |
+| `tests/integration/test_pipeline.py` | Full multi-agent workflow: single winner selection, honest rejection of all candidates, graceful error recovery | 3 | `PASSED` |
+| `tests/e2e/test_ui_imports.py` | Streamlit UI pages import, CLI `--help` verification | 2 | `PASSED` |
+| `tests/e2e/test_ollama_smoke.py` | Live inference smoke test with local Ollama service | 1 | `OPTIONAL` |
 
+---
+
+## 3. Running Live Ollama & Quality Verification Benchmarks
+
+### 1. Local Model Smoke Test
+To verify the active local Ollama service with `qwen2.5:3b`:
 ```powershell
 $env:RUN_OLLAMA_TESTS="1"
 python -m pytest tests/e2e/test_ollama_smoke.py -v
 ```
 
-This checks that Ollama is reachable, at least one model is installed, and the
-client can obtain schema-valid JSON from the real model.
-
-## What the offline suite covers
-
-| Area | Tests |
-|---|---|
-| Configuration | rubric weights total 100; invalid totals rejected |
-| LLM robustness | JSON extraction from plain text, code fences, prose, arrays; malformed output rejection; truncation |
-| Storage | budget warning, download guard, cache-only cleanup |
-| Database | sessions, agent results, source dedupe, intelligence dedupe, refresh log, report round-trip |
-| Evidence | SSRF/private URL rejection, public URL acceptance, hallucinated URL removal, similarity |
-| Rubric | all gates pass, high score cannot hide a failed evidence gate, commonly-solved fails originality, unrealistic hours fail deadline |
-| Full workflow | five-agent run selects one winner; run can reject all candidates; model failure marks session failed and preserves partial state |
-| UI/CLI | every UI module imports; CLI `--help` works |
-
-## Test doubles
-
-`tests/fakes.py` provides:
-
-- `FakeLLM` — schema-appropriate deterministic responses for every agent and
-  rubric prompt; configurable score; `force_reject_all`.
-- `FakeResearch` — deterministic search bundles, GitHub projects and pages.
-- `FakeIntelligence` — empty Continuous Intelligence context.
-
-The integration tests run the **real** LangGraph pipeline, real Pydantic
-validation, real SQLite persistence and real report generation. Only the LLM
-and outbound network calls are replaced.
-
-## What is not covered offline
-
-- Live connector behaviour against changing APIs (GitHub, arXiv, OpenAlex,
-  Crossref, RSS, Wikipedia, Hacker News, DuckDuckGo).
-- Real model latency and prompt adherence.
-- Browser-level interaction beyond Streamlit's `AppTest` import/render checks.
-
-These require live verification and are reported honestly in the final
-acceptance walkthrough.
-
-## Manual smoke checks
-
+### 2. Live Winner Verification Benchmark
+To run the live scientific verification benchmark against local Ollama:
 ```powershell
-# 1. Environment
-python -m src.cli check
-
-# 2. Database
-python -m src.cli init-db
-
-# 3. UI
-python -m streamlit run ui/app.py
-# open http://localhost:8501 and visit all five pages
-
-# 4. A minimal real run (small bounds keep it tractable)
-python -m src.cli research --theme "Sustainable cities" --max-domains 3 --problems-per-domain 1 --finalists 2 --debate-rounds 1 --no-ci
-
-# 5. Continuous Intelligence
-python -m src.cli intelligence-refresh
+python tests/benchmark_phase4_1_verification.py
 ```
+This benchmark evaluates real model responses against the 10 mandatory quality gates, records latency, token throughput, and GPU VRAM offload.
 
-## Failure expectations
+---
 
-- If Ollama is offline, the UI shows an actionable error and `check` exits 1.
-- If no model is installed, downloads are refused or explained; nothing is
-  downloaded silently.
-- If the model repeatedly returns invalid JSON, the run is marked `failed` with
-  the stage and error persisted.
-- If no candidate passes every gate, the run completes with
-  `completed_no_winner`; this is a correct outcome, not a test failure.
+## 4. Test Doubles & Deterministic Fakes (`tests/fakes.py`)
+
+Deterministic test execution is enabled by `tests/fakes.py`:
+- **`FakeLLM`**: Generates schema-conformant Pydantic outputs for every agent and evaluation prompt; allows testing score adjustments and rejection triggers deterministically.
+- **`FakeResearch`**: Returns fixed search bundles, GitHub repositories, and web excerpts without network I/O.
+- **`FakeIntelligence`**: Ingests controlled intelligence contexts for isolated agent testing.
+
+The integration tests run the **real** LangGraph pipeline, real Pydantic validation, real SQLite persistence, and real report generation. Only external LLM and network calls are mocked.

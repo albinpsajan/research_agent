@@ -103,6 +103,28 @@ class OpportunityClassification(StrEnum):
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
 
 
+class AdaptabilityClassification(StrEnum):
+    """Five-tier global-to-local transferability classification."""
+
+    TIER_A_DIRECT = "tier_a_directly_transferable"  # Applicable with minimal change: data/API swap only
+    TIER_B_MODIFIED = "tier_b_adaptable_with_modifications"  # Requires adaptation: local data, language, institutional context
+    TIER_C_REDESIGN = "tier_c_requires_fundamental_redesign"  # Concept viable, but physical/institutional realities require redesign
+    TIER_D_NON_TRANSFERABLE = "tier_d_non_transferable"  # Inapplicable due to climate, infrastructure, legal, or geographic incompatibility
+    TIER_E_LOCALLY_ORIGINATED = "tier_e_locally_originated"  # Native innovation born from local conditions, no direct global analogue
+
+
+class GlobalToLocalAdaptation(BaseModel):
+    """Rigorous mapping from international innovation to Kerala and Indian localization."""
+
+    global_reference_solution: str = ""
+    global_source_url: str | None = None
+    transferability_tier: AdaptabilityClassification = AdaptabilityClassification.TIER_B_MODIFIED
+    kerala_applicability: str = ""
+    india_scale_potential: str = ""
+    required_modifications: list[str] = Field(default_factory=list)
+    local_constraints: list[str] = Field(default_factory=list)
+
+
 class InnovationGap(BaseModel):
     """An identified gap in existing solutions."""
 

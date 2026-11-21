@@ -355,11 +355,11 @@ def test_gate_failure_categorization():
         classification=OpportunityClassification.INSUFFICIENT_EVIDENCE,
     )
 
-    reason1 = EvidenceAggregator.classify_gate_failure(GATE_NAMES[0], cand, prob_single_source, gap_none)
+    reason1 = EvidenceAggregator.classify_gate_failure(GATE_NAMES[1], cand, prob_single_source, gap_none)
     assert "RESEARCH_INSUFFICIENT" in reason1
 
-    reason2 = EvidenceAggregator.classify_gate_failure(GATE_NAMES[1], cand, prob_single_source, gap_none)
+    reason2 = EvidenceAggregator.classify_gate_failure(GATE_NAMES[3], cand, prob_single_source, gap_none)
     assert "RESEARCH_INSUFFICIENT" in reason2
 
-    reason3 = EvidenceAggregator.classify_gate_failure(GATE_NAMES[2], cand, prob_single_source, gap_none)
+    reason3 = EvidenceAggregator.classify_gate_failure(GATE_NAMES[4], cand, prob_single_source, gap_none)
     assert "NO_DIFFERENTIATION" in reason3

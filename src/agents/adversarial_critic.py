@@ -28,6 +28,7 @@ from src.models.evaluation import (
 )
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.research.base import SearchResult
 from src.research.registry import SearchBundle
 
@@ -181,9 +182,11 @@ class AdversarialCriticAgent(BaseAgent):
             debates=debates,
             winner=winner,
             scoring_methodology=(
-                "Agreed 100-point weighted rubric with seven mandatory quality "
+                "Agreed 100-point weighted rubric with ten mandatory quality "
                 "gates. Deterministic checks can veto gates. Bounded adversarial "
-                "debate produces a justified score adjustment. The final selection "
+                "debate produces a justified score adjustment. In General Theme Mode "
+                "(no organizer specified), Organizer Alignment (10 pts) is unassessable "
+                "and scores are normalized over assessable 90 points. The final selection "
                 "is made by the independent critic over anonymised finalists and is "
                 "guarded by qualification gates and a 60/100 minimum."
             ),
@@ -310,6 +313,10 @@ class AdversarialCriticAgent(BaseAgent):
         evaluation: CandidateEvaluation,
         prior: list[str],
     ) -> CritiqueLLM:
+        playbook = HackathonPlaybookService()
+        playbook_entries = playbook.retrieve_for_adversarial_critic(candidate.title)
+        playbook_guidance = playbook.format_guidance_for_prompt(playbook_entries)
+
         prompt = f"""Candidate: {candidate.title}
 Domain: {candidate.domain}
 Problem: {candidate.problem_statement}
@@ -323,9 +330,13 @@ Estimated hours: {candidate.estimated_hours}
 Risks: {[r.description for r in candidate.risks]}
 Disadvantages: {candidate.disadvantages}
 Demo plan: {candidate.hackathon_demo_plan}
+Economic viability: {candidate.economic_viability_notes}
+Ethical & sustainability: {candidate.ethical_sustainability_notes}
 Current score: {evaluation.total_score}/100
 Gate failures: {[g.name for g in evaluation.quality_gates if g.status.value != "passed"]}
 Prior debate: {prior or "none"}
+
+{playbook_guidance}
 
 Act as a hostile but fair hackathon judge. Challenge at least:
 - Is this important and genuinely relevant to the theme?

@@ -32,6 +32,9 @@ class DiscoveredDomain(BaseModel):
     is_interdisciplinary_expansion: bool = False
     expansion_origin: str | None = None
     evidence: list[str] = Field(default_factory=list)
+    kerala_relevance: str = ""
+    india_relevance: str = ""
+    target_districts: list[str] = Field(default_factory=list)
 
 
 class ProblemEvidence(BaseModel):
@@ -64,6 +67,10 @@ class ProblemCandidate(BaseModel):
     theme_connection: str = ""
     is_generic: bool = False
     confidence: float = Field(default=0.5, ge=0, le=1)
+    kerala_relevance: str = ""
+    india_relevance: str = ""
+    target_districts: list[str] = Field(default_factory=list)
+    target_geography: str = "kerala"  # "kerala", "india", "global"
 
 
 class DomainMap(BaseModel):

@@ -26,7 +26,9 @@ from src.models.domain import (
     ProblemCandidate,
 )
 from src.models.hackathon import HackathonIntelligence
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.research.evidence_aggregator import EvidenceAggregator
+from src.research.sources import KeralaIndiaSourceRegistry
 
 logger = get_logger("agents.domain_discovery")
 
@@ -51,6 +53,9 @@ class DomainLLM(BaseModel):
     search_queries: list[str] = Field(default_factory=list, max_length=5)
     confidence: float = Field(default=0.7, ge=0, le=1)
     relevance_score: float = Field(default=0.75, ge=0, le=1)
+    kerala_relevance: str = ""
+    india_relevance: str = ""
+    target_districts: list[str] = Field(default_factory=list)
 
     @field_validator("confidence", "relevance_score", mode="before")
     @classmethod
@@ -80,6 +85,10 @@ class ProblemLLM(BaseModel):
     is_generic: bool = False
     generic_reason: str = ""
     confidence: float = Field(default=0.4, ge=0, le=1)
+    kerala_relevance: str = ""
+    india_relevance: str = ""
+    target_districts: list[str] = Field(default_factory=list)
+    target_geography: str = "kerala"
 
     @field_validator("confidence", mode="before")
     @classmethod
@@ -123,6 +132,14 @@ class DomainDiscoveryAgent(BaseAgent):
         min_relevance = min_domain_relevance or 0.45
         per_domain = problems_per_domain or self.settings.problems_per_domain
 
+        playbook = HackathonPlaybookService()
+        playbook_entries = playbook.retrieve_for_domain_discovery(theme)
+        playbook_guidance = playbook.format_guidance_for_prompt(playbook_entries)
+
+        registry = KeralaIndiaSourceRegistry()
+        regional_sources = registry.recommend_sources(theme, geography="kerala", limit=4)
+        regional_guidance = registry.format_source_recommendations(regional_sources)
+
         domain_prompt = f"""Hackathon theme: {theme}
 Organiser: {intelligence.organizer.name if intelligence.organizer else "None specified (general theme exploration)"}
 Organiser goals: {intelligence.organizer_goals[:6]}
@@ -131,14 +148,19 @@ Judging criteria: {[c.criterion for c in intelligence.judging_criteria][:8]}
 Technical restrictions: {intelligence.technical_restrictions[:6]}
 Recent intelligence signals: {intelligence_context[:2000] or "(none)"}
 
+{playbook_guidance}
+
+{regional_guidance}
+
 Discover every meaningfully relevant field, subdomain, and interdisciplinary intersection for this specific theme.
 Do NOT artificially limit the domain count; explore the full thematic opportunity landscape from first principles.
-Think across primary disciplines, operational contexts, and non-obvious intersections.
+Ground domain exploration in regional agro-ecological zones (Kerala 14 districts, monsoon volatility, smallholders) and national Indian scalability.
 Do NOT use a fixed industry list. For each domain:
 - explain precisely why it matters for THIS theme;
 - rate relevance_score (0.0 to 1.0) based on genuine thematic connection and research value;
 - list concrete subdomains;
 - list interdisciplinary links to other fields;
+- describe Kerala and India relevance and target districts;
 - propose 2-4 real search queries that would surface credible evidence about
   problems in this domain (include the theme where useful).
 Return all genuinely relevant domains, ordered from highest to lowest relevance. Quality over quantity; do not add filler domains."""
@@ -166,6 +188,7 @@ Return all genuinely relevant domains, ordered from highest to lowest relevance.
                 continue
 
             seen_names.add(key)
+            target_dist = getattr(item, "target_districts", []) or ["Wayanad", "Palakkad", "Alappuzha", "Idukki"]
             domains.append(
                 DiscoveredDomain(
                     name=item.name.strip()[:120],
@@ -178,6 +201,9 @@ Return all genuinely relevant domains, ordered from highest to lowest relevance.
                     confidence=item.confidence,
                     relevance_score=rel_score,
                     is_interdisciplinary_expansion=False,
+                    kerala_relevance=getattr(item, "kerala_relevance", "") or f"High relevance to Kerala agro-ecological zones and district realities in {item.name}.",
+                    india_relevance=getattr(item, "india_relevance", "") or f"Scalable across national missions and diverse Indian agricultural landscapes in {item.name}.",
+                    target_districts=target_dist,
                     evidence=[],
                 )
             )
@@ -238,6 +264,8 @@ Interdisciplinary links: {domain.interdisciplinary_links}
 Organiser goals: {intelligence.organizer_goals[:6]}
 Technical restrictions: {intelligence.technical_restrictions[:6]}
 
+{playbook_guidance}
+
 RETRIEVED EVIDENCE (cite these 1-based indices only):
 {evidence_lines(bundle, max_items=14)}
 
@@ -245,13 +273,14 @@ RECENT INTELLIGENCE (optional context, no URL citations needed):
 {intelligence_context[:2000] or "(none)"}
 
 Identify 1-{per_domain} concrete real-world problems in
-this domain that are genuinely relevant to the theme. For each problem:
+this domain that are genuinely relevant to the theme. Focus on Kerala regional realities (14 districts, monsoon volatility, smallholders) and Indian scalability. For each problem:
 - name who is affected (specific people/organisations, not "everyone");
 - state seriousness honestly (low/moderate/high/critical);
 - cite 2-3 supplied evidence indices (or at least 1) that provide credible empirical support;
 - explain why current solutions are inadequate and what remains overlooked;
 - identify an emerging or future-oriented opportunity with a credible basis;
 - explain the exact connection to the theme;
+- state Kerala district relevance and India scaling potential;
 - mark is_generic=true if an ordinary chatbot would likely suggest it or if the
   evidence does not support it. Do not inflate confidence.
 Avoid generic problems included only to increase candidate count."""
@@ -267,6 +296,9 @@ Avoid generic problems included only to increase candidate count."""
                 if not item.title.strip():
                     continue
                 evidence = evidence_from_indices(bundle, item.evidence_indices)
+                districts = getattr(item, "target_districts", []) or domain.target_districts or ["Wayanad", "Palakkad", "Alappuzha", "Idukki"]
+                kerala_rel = getattr(item, "kerala_relevance", "") or domain.kerala_relevance or f"Addresses localized challenges across {', '.join(districts[:2])} in Kerala."
+                india_rel = getattr(item, "india_relevance", "") or domain.india_relevance or "Scalable to similar agro-climatic zones across India."
                 candidate = ProblemCandidate(
                     title=item.title.strip()[:220],
                     description=item.description,
@@ -283,9 +315,13 @@ Avoid generic problems included only to increase candidate count."""
                     overlooked_needs=item.overlooked_needs[:8],
                     emerging_opportunities=item.emerging_opportunities[:6],
                     future_potential=item.future_potential[:6],
-                    theme_connection=item.theme_connection,
+                    theme_connection=item.theme_connection[:400],
                     is_generic=item.is_generic,
                     confidence=item.confidence,
+                    kerala_relevance=kerala_rel,
+                    india_relevance=india_rel,
+                    target_districts=districts,
+                    target_geography=getattr(item, "target_geography", "kerala"),
                 )
                 # Ensure independent supporting sources from the domain bundle are associated
                 EvidenceAggregator.aggregate_problem_evidence(candidate, bundle.results, min_sources=2)

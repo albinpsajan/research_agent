@@ -92,4 +92,5 @@ class HackathonIntelligence(BaseModel):
     verified_facts: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     research_sources: list[str] = Field(default_factory=list)
+    is_general_theme_mode: bool = False
     generated_at: datetime = Field(default_factory=utc_now)

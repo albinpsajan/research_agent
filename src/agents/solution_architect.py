@@ -17,6 +17,7 @@ from src.models.candidate import (
 from src.models.domain import ProblemCandidate
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap, OpportunityClassification
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.research.evidence_aggregator import EvidenceAggregator
 
 logger = get_logger("agents.solution_architect")
@@ -228,6 +229,10 @@ class SolutionArchitectAgent(BaseAgent):
         if not existing_text:
             existing_text = "(no existing solutions were verifiably identified)"
 
+        playbook = HackathonPlaybookService()
+        playbook_entries = playbook.retrieve_for_solution_architect(problem.domain, hours=available_hours)
+        playbook_guidance = playbook.format_guidance_for_prompt(playbook_entries)
+
         prompt = f"""Hackathon theme: {theme}
 Problem domain: {problem.domain} / {problem.subdomain or "general"}
 Problem candidate: {problem.title}
@@ -238,6 +243,8 @@ Evidence:
 {evidence_text}
 Inadequate current solutions: {problem.inadequate_solutions}
 Overlooked needs: {problem.overlooked_needs}
+
+{playbook_guidance}
 Opportunity: {problem.emerging_opportunities}
 Existing solutions found:
 {existing_text}

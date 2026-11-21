@@ -18,6 +18,7 @@ from src.models.hackathon import (
     SponsorProfile,
 )
 from src.models.provenance import CategorizedConstraint, ProvenanceCategory
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.research.base import ResearchError
 from src.research.registry import SearchBundle
 
@@ -197,12 +198,18 @@ facts; this is only a search plan."""
         bundle.dedupe()
         bundle.results = bundle.results[:30]
 
+        playbook = HackathonPlaybookService()
+        playbook_entries = playbook.retrieve_for_intelligence(hackathon.theme)
+        playbook_guidance = playbook.format_guidance_for_prompt(playbook_entries)
+
         prompt = f"""Hackathon theme: {hackathon.theme}
 Hackathon name: {hackathon.name or "not supplied"}
 Official website: {hackathon.website_url or "not supplied"}
 Rules URL: {hackathon.rules_url or "not supplied"}
 Deadline: {hackathon.deadline.isoformat() if hackathon.deadline else "not supplied"}
 User constraints: {hackathon.constraints or "none"}
+
+{playbook_guidance}
 
 OFFICIAL PAGE EXCERPTS:
 {chr(10).join(official_texts)[:9000] or "(none retrieved)"}
@@ -267,6 +274,13 @@ Keep lists focused (max 8 items each). Do not invent URLs."""
                 )
 
         has_specific_event = bool(hackathon.name or hackathon.website_url or hackathon.rules_url)
+        is_general_theme = not has_specific_event or not (result.organizer.name or organizer_name)
+        if is_general_theme:
+            assumptions.insert(
+                0,
+                "GENERAL THEME MODE: No specific organizer or sponsors were provided. Operating under theme-first mode; organizer and sponsor alignment is marked unassessable to ensure objective, uninvented research.",
+            )
+
         organizer_profile = None
         if has_specific_event and (result.organizer.name or organizer_name):
             organizer_profile = OrganizerProfile(
@@ -331,6 +345,7 @@ Keep lists focused (max 8 items each). Do not invent URLs."""
             verified_facts=result.verified_facts[:20],
             assumptions=assumptions[:20],
             research_sources=research_sources,
+            is_general_theme_mode=is_general_theme,
         )
         self._save(session_id, "hackathon_intelligence", intelligence)
         return intelligence

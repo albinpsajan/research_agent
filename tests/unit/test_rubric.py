@@ -17,6 +17,7 @@ from src.models.research import (
     InnovationGap,
     OpportunityClassification,
 )
+from src.research.evidence_aggregator import EvidenceAggregator
 from src.utils.hackathon_time import utc_now
 from tests.fakes import FakeLLM
 
@@ -64,7 +65,7 @@ def _gap(
 
 
 def _candidate(hours: float = 20) -> CandidateSolution:
-    return CandidateSolution(
+    candidate = CandidateSolution(
         id="C01",
         title="Exposure-aware commute coach",
         problem_candidate_id="P01",
@@ -103,6 +104,8 @@ def _candidate(hours: float = 20) -> CandidateSolution:
         confidence=0.8,
         domain="Urban mobility",
     )
+    EvidenceAggregator.ensure_candidate_completeness(candidate)
+    return candidate
 
 
 def _hackathon(hours: int = 36) -> HackathonInput:
@@ -122,8 +125,11 @@ def test_all_gates_pass_and_score_is_weighted() -> None:
         HackathonIntelligence(hackathon_input=_hackathon()),
     )
     assert len(evaluation.scores) == 8
-    assert round(evaluation.base_score, 1) == 80.0
-    assert len(evaluation.quality_gates) == 7
+    assert evaluation.is_general_theme_mode
+    assert evaluation.raw_score == 72.0  # 8.0 * (90/10)
+    assert round(evaluation.normalized_score, 1) == 80.0
+    assert round(evaluation.total_score, 1) == 80.0
+    assert len(evaluation.quality_gates) == 10
     assert all(g.name in GATE_NAMES for g in evaluation.quality_gates)
     assert evaluation.all_gates_passed
     assert evaluation.is_qualified
@@ -138,7 +144,7 @@ def test_missing_evidence_fails_gate_despite_high_score() -> None:
         _hackathon(),
         HackathonIntelligence(hackathon_input=_hackathon()),
     )
-    evidence_gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[0])
+    evidence_gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[1])
     assert evidence_gate.status.value == "failed"
     assert not evaluation.is_qualified
     assert evaluation.total_score == 100.0  # high score must not hide the failure
@@ -153,7 +159,7 @@ def test_commonly_solved_fails_originality_gate() -> None:
         _hackathon(),
         HackathonIntelligence(hackathon_input=_hackathon()),
     )
-    gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[2])
+    gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[4])
     assert gate.status.value == "failed"
     assert not evaluation.is_qualified
 
@@ -167,6 +173,6 @@ def test_unrealistic_hours_fail_deadline_gate() -> None:
         _hackathon(hours=36),
         HackathonIntelligence(hackathon_input=_hackathon(hours=36)),
     )
-    gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[4])
+    gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[8])
     assert gate.status.value == "failed"
     assert not evaluation.is_qualified

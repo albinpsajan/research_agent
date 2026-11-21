@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from src.models.research import GlobalToLocalAdaptation
 from src.utils.hackathon_time import utc_now
 
 
@@ -59,6 +60,11 @@ class CandidateSolution(BaseModel):
     disadvantages: list[str] = Field(default_factory=list)
     mitigation_strategies: list[str] = Field(default_factory=list)
     hackathon_demo_plan: str = ""
+    kerala_adaptation: GlobalToLocalAdaptation | None = None
+    target_geography: str = "kerala"
+    target_districts: list[str] = Field(default_factory=list)
+    economic_viability_notes: str = ""
+    ethical_sustainability_notes: str = ""
     feasibility_score: float = Field(default=0.5, ge=0, le=1)
     is_rejected: bool = False
     rejection_reason: str | None = None

@@ -15,6 +15,8 @@ class QualityGateStatus(StrEnum):
     FAILED = "failed"
     WARNING = "warning"
     NOT_EVALUATED = "not_evaluated"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    NOT_APPLICABLE = "not_applicable"
 
 
 class QualityGate(BaseModel):
@@ -48,6 +50,9 @@ class CandidateEvaluation(BaseModel):
     base_score: float = 0
     debate_adjustment: float = 0
     total_score: float = 0
+    raw_score: float = 0.0
+    normalized_score: float = 0.0
+    is_general_theme_mode: bool = False
     quality_gates: list[QualityGate] = Field(default_factory=list)
     all_gates_passed: bool = False
     overall_assessment: str = ""
@@ -59,10 +64,25 @@ class CandidateEvaluation(BaseModel):
 
     def calculate_total(self) -> None:
         """Calculate base weighted score, gates, and post-debate total."""
-        self.base_score = round(sum(s.weighted_score for s in self.scores), 2)
-        self.total_score = round(
-            max(0.0, min(100.0, self.base_score + self.debate_adjustment)), 2
-        )
+        self.raw_score = round(sum(s.weighted_score for s in self.scores), 2)
+        if self.is_general_theme_mode:
+            # Organizer and sponsor alignment (10 pts) is not assessable (0 raw out of 90)
+            # Normalized to 100-point scale: (raw / 90) * 100
+            assessable_weight = sum(s.weight for s in self.scores if "organizer" not in s.name.lower() and "sponsor" not in s.name.lower())
+            if assessable_weight > 0:
+                self.normalized_score = round(min(100.0, (self.raw_score / assessable_weight) * 100.0), 2)
+            else:
+                self.normalized_score = self.raw_score
+            self.base_score = self.raw_score
+            self.total_score = round(
+                max(0.0, min(100.0, self.normalized_score + self.debate_adjustment)), 2
+            )
+        else:
+            self.base_score = self.raw_score
+            self.normalized_score = self.base_score
+            self.total_score = round(
+                max(0.0, min(100.0, self.base_score + self.debate_adjustment)), 2
+            )
         self.all_gates_passed = all(
             g.status == QualityGateStatus.PASSED for g in self.quality_gates
         )
