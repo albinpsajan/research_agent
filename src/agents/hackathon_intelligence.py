@@ -136,7 +136,7 @@ class HackathonIntelligenceAgent(BaseAgent):
             ("official website", hackathon.website_url),
             ("rules page", hackathon.rules_url),
         ):
-            if not url:
+            if not url or url.startswith("doc://"):
                 continue
             try:
                 page = self.research.fetch_page(session_id, url)
@@ -243,8 +243,9 @@ Produce the Hackathon Intelligence Report. Determine:
 5. What is verified versus assumed. Include explicit assumptions when evidence is thin.
 Keep lists focused (max 8 items each). Do not invent URLs."""
         result = self.llm.generate_json(prompt, HackathonIntelLLM, SYSTEM)
+        valid_external = [u for u in [hackathon.website_url, hackathon.rules_url] if u and not u.startswith("doc://")]
         allowed = allowed_urls(
-            bundle, page_urls + [hackathon.website_url or "", hackathon.rules_url or ""] + doc_citations
+            bundle, page_urls + valid_external + doc_citations
         )
         sanitize_model_urls(result, allowed)
 
@@ -261,6 +262,7 @@ Keep lists focused (max 8 items each). Do not invent URLs."""
                 "organiser intelligence as low-confidence."
             )
 
+        has_doc_evidence = bool(doc_hits)
         categorized_constraints: list[CategorizedConstraint] = []
         if hackathon.constraints:
             for line in hackathon.constraints.splitlines():
@@ -276,7 +278,7 @@ Keep lists focused (max 8 items each). Do not invent URLs."""
                     )
         for restriction in result.technical_restrictions:
             if restriction.strip():
-                is_official = bool(hackathon.rules_url or hackathon.website_url)
+                is_official = bool(hackathon.rules_url or hackathon.website_url or has_doc_evidence)
                 cat = ProvenanceCategory.OFFICIAL_HACKATHON if is_official else ProvenanceCategory.AGENT_HYPOTHESIS
                 categorized_constraints.append(
                     CategorizedConstraint(
@@ -287,7 +289,7 @@ Keep lists focused (max 8 items each). Do not invent URLs."""
                     )
                 )
 
-        has_specific_event = bool(hackathon.name or hackathon.website_url or hackathon.rules_url)
+        has_specific_event = bool(hackathon.name or hackathon.website_url or hackathon.rules_url or has_doc_evidence)
         is_general_theme = not has_specific_event or not (result.organizer.name or organizer_name)
         if is_general_theme:
             assumptions.insert(

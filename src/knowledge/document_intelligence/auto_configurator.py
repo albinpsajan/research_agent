@@ -77,13 +77,25 @@ class HackathonAutoConfigurator:
             else:
                 name = "Autonomous Document-Driven Research Session"
 
-        # Official Website
-        website = user_overrides.get("website_url") or profile.official_website
-        if website and not website.startswith(("http://", "https://")):
-            website = f"https://{website}"
+        # Official Website: Only valid external HTTP/HTTPS URL
+        raw_website = user_overrides.get("website_url") or profile.official_website
+        website: str | None = None
+        if raw_website and isinstance(raw_website, str):
+            clean_website = raw_website.strip()
+            if clean_website.startswith(("http://", "https://")):
+                website = clean_website
+            elif not clean_website.startswith("doc://") and "." in clean_website and not clean_website.endswith((".pdf", ".png", ".jpg", ".jpeg", ".webp")):
+                website = f"https://{clean_website}"
 
-        # Rules URL: Use official URL or link to primary uploaded doc
-        rules_url = user_overrides.get("rules_url") or (f"doc://{primary_filename}" if primary_filename else None)
+        # Rules URL: Only valid external HTTP/HTTPS URL. Never assign internal doc:// references.
+        raw_rules = user_overrides.get("rules_url") or getattr(profile, "official_rules_url", None)
+        rules_url: str | None = None
+        if raw_rules and isinstance(raw_rules, str):
+            clean_rules = raw_rules.strip()
+            if clean_rules.startswith(("http://", "https://")):
+                rules_url = clean_rules
+            elif not clean_rules.startswith("doc://") and "." in clean_rules and "/" in clean_rules and not clean_rules.endswith((".pdf", ".png", ".jpg", ".jpeg", ".webp")):
+                rules_url = f"https://{clean_rules}"
 
         # Parse deadline safely
         deadline = cls._parse_deadline(user_overrides.get("deadline") or profile.submission_deadline)

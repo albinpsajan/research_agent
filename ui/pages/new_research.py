@@ -52,8 +52,8 @@ def render() -> None:
 
     default_theme = auto_cfg.theme if auto_cfg else ""
     default_name = auto_cfg.name or "" if auto_cfg else ""
-    default_website = auto_cfg.website_url or "" if auto_cfg else ""
-    default_rules = auto_cfg.rules_url or "" if auto_cfg else ""
+    default_website = auto_cfg.website_url or "" if (auto_cfg and auto_cfg.website_url and not auto_cfg.website_url.startswith("doc://")) else ""
+    default_rules = auto_cfg.rules_url or "" if (auto_cfg and auto_cfg.rules_url and not auto_cfg.rules_url.startswith("doc://")) else ""
     default_constraints = auto_cfg.constraints or "" if auto_cfg else ""
     default_is_multi_track = auto_cfg.is_multi_track if auto_cfg else False
     default_mode_index = 1 if (auto_cfg and auto_cfg.multi_track_mode == MultiTrackMode.BEST_PER_TRACK) else 0
@@ -245,6 +245,9 @@ def render() -> None:
         return
     for label, url in (("Website", website), ("Rules", rules)):
         if url.strip():
+            if url.strip().startswith("doc://"):
+                st.error(f"{label} URL cannot be an internal document reference ('doc://'). Uploaded documents are automatically used as primary evidence.")
+                return
             try:
                 validate_public_url(url.strip())
             except ResearchError as exc:
