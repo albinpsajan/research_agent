@@ -78,11 +78,13 @@ class LLMStats:
         }
 
 
-def extract_json(text: str) -> Any:
+def extract_json(text: str, allow_salvage: bool = False) -> Any:
     """Extract the first balanced JSON object/array from model output.
 
     Small local models frequently wrap JSON in prose or code fences.  This
     parser is deliberately tolerant about wrapping but strict about syntax.
+    If *allow_salvage* is True, safe completion of truncated brackets/strings
+    is attempted when output terminates mid-stream.
     """
     if not text or not text.strip():
         raise LLMOutputError("Empty model response")
@@ -108,6 +110,7 @@ def extract_json(text: str) -> Any:
     depth = 0
     in_string = False
     escaped = False
+    bracket_stack: list[str] = []
     for index in range(start, len(cleaned)):
         char = cleaned[index]
         if in_string:
@@ -120,10 +123,13 @@ def extract_json(text: str) -> Any:
             continue
         if char == '"':
             in_string = True
-        elif char == opener:
+        elif char in ("{", "["):
             depth += 1
-        elif char == closer:
+            bracket_stack.append("}" if char == "{" else "]")
+        elif char in ("}", "]"):
             depth -= 1
+            if bracket_stack and bracket_stack[-1] == char:
+                bracket_stack.pop()
             if depth == 0:
                 candidate = cleaned[start : index + 1]
                 try:
@@ -135,6 +141,20 @@ def extract_json(text: str) -> Any:
                         return json.loads(fixed)
                     except json.JSONDecodeError as exc:
                         raise LLMOutputError(f"Malformed JSON: {exc}") from exc
+
+    # Attempt safe salvage if response was truncated mid-stream by token limit
+    if allow_salvage and depth > 0 and bracket_stack:
+        salvage = cleaned[start:]
+        if in_string:
+            salvage += '"'
+        salvage = re.sub(r",\s*$", "", salvage)
+        salvage += "".join(reversed(bracket_stack))
+        fixed = re.sub(r",\s*([\]}])", r"\1", salvage)
+        try:
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            pass
+
     raise LLMOutputError("Unbalanced JSON in model response")
 
 
@@ -358,7 +378,10 @@ class OllamaClient:
                 )
             raw = self._chat(instruction, system, json_schema, temperature, None)
             try:
-                payload = extract_json(raw)
+                try:
+                    payload = extract_json(raw)
+                except LLMOutputError:
+                    payload = extract_json(raw, allow_salvage=True)
                 return schema.model_validate(payload)
             except (LLMOutputError, ValidationError) as exc:
                 last_error = str(exc)[:1500]

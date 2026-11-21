@@ -49,15 +49,15 @@ class DomainLLM(BaseModel):
     description: str = ""
     relevance_type: str = "primary"
     relevance_explanation: str = ""
-    subdomains: list[str] = Field(default_factory=list)
-    connections_to_theme: list[str] = Field(default_factory=list)
-    interdisciplinary_links: list[str] = Field(default_factory=list)
+    subdomains: list[str] = Field(default_factory=list, max_length=5)
+    connections_to_theme: list[str] = Field(default_factory=list, max_length=5)
+    interdisciplinary_links: list[str] = Field(default_factory=list, max_length=5)
     search_queries: list[str] = Field(default_factory=list, max_length=5)
     confidence: float = Field(default=0.7, ge=0, le=1)
     relevance_score: float = Field(default=0.75, ge=0, le=1)
     kerala_relevance: str = ""
     india_relevance: str = ""
-    target_districts: list[str] = Field(default_factory=list)
+    target_districts: list[str] = Field(default_factory=list, max_length=5)
 
     @field_validator("confidence", "relevance_score", mode="before")
     @classmethod
@@ -154,18 +154,17 @@ Recent intelligence signals: {intelligence_context[:2000] or "(none)"}
 
 {regional_guidance}
 
-Discover every meaningfully relevant field, subdomain, and interdisciplinary intersection for this specific theme.
-Do NOT artificially limit the domain count; explore the full thematic opportunity landscape from first principles.
-Ground domain exploration in regional agro-ecological zones (Kerala 14 districts, monsoon volatility, smallholders) and national Indian scalability.
+Discover up to {budget} meaningfully relevant fields, subdomains, and interdisciplinary intersections for this specific theme.
+Ground domain exploration in regional agro-ecological zones and national Indian scalability.
 Do NOT use a fixed industry list. For each domain:
 - explain precisely why it matters for THIS theme;
 - rate relevance_score (0.0 to 1.0) based on genuine thematic connection and research value;
-- list concrete subdomains;
-- list interdisciplinary links to other fields;
-- describe Kerala and India relevance and target districts;
-- propose 2-4 real search queries that would surface credible evidence about
+- list 2-4 concrete subdomains;
+- list 2-3 interdisciplinary links to other fields;
+- describe Kerala and India relevance and list 1-3 target districts;
+- propose 2-3 real search queries that would surface credible evidence about
   problems in this domain (include the theme where useful).
-Return all genuinely relevant domains, ordered from highest to lowest relevance. Quality over quantity; do not add filler domains."""
+Return all genuinely relevant domains. Quality over quantity; keep list entries concise."""
         domain_list = self.llm.generate_json(domain_prompt, DomainListLLM, SYSTEM)
 
         domains: list[DiscoveredDomain] = []

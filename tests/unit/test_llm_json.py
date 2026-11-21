@@ -33,6 +33,11 @@ def test_extract_rejects_empty_and_malformed() -> None:
         extract_json('{"a": 1')
 
 
+def test_extract_salvage_truncated() -> None:
+    assert extract_json('{"a": 1', allow_salvage=True) == {"a": 1}
+    assert extract_json('{"a": [1, 2', allow_salvage=True) == {"a": [1, 2]}
+
+
 def test_truncate_marks_loss() -> None:
     output = truncate("abcdefghij", 5)
     assert output.startswith("abcde")
