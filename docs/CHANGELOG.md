@@ -3,6 +3,42 @@
 
 ---
 
+## [Multi-Track Hackathon Intelligence: Best Overall Track + Best Idea Per Track] — 2026-11-21
+
+### Added:
+- **Arbitrary Multi-Track Support** (`src/models/hackathon.py`, `src/models/multitrack.py`):
+  - Dynamic track definition supporting any number of tracks (1, 2, 6, 8+ tracks) with optional descriptions, track rules, and official track URLs.
+  - Zero hardcoded track count limits.
+- **Two User-Selectable Operating Modes**:
+  - **Mode A (Best Overall Track)**: Cross-compares all qualifying candidates across all tracks to identify the single strongest opportunity, with comprehensive runner-up explanations.
+  - **Mode B (Best Idea Per Track)**: Identifies the strongest qualifying idea independently for every supplied track. For disqualified tracks, strictly issues: *"No qualifying problem statement found for this track."*
+- **Dedicated Cross-Track Comparison Engine** (`src/evaluation/cross_track_comparison.py`):
+  - Uniform multi-criterion scoring & 10-gate qualification enforcement across tracks.
+  - Token-based Jaccard similarity (0.58 threshold) for cross-track duplicate/near-duplicate detection.
+  - Best-fit track allocation based on semantic token overlap with track name and description.
+  - Honest rejection enforcement without manufactured winners.
+- **Sequential Resource-Safe Execution & Pipeline Orchestration** (`src/orchestration/pipeline.py`):
+  - Shared Organizer Intelligence (Agent 1 executed once across all tracks).
+  - Independent sequential execution of Agents 2–5 per track.
+  - Explicit `gc.collect()` between track turns, preserving RTX 3050 Laptop GPU (6 GB VRAM) stability.
+  - Fault-tolerant error recovery: failure in one track does not abort the multi-track pipeline.
+- **SQLite Database Migration 003** (`src/database/migrations.py`, `src/database/repository.py`):
+  - Added `hackathon_tracks` and `multi_track_comparisons` tables.
+  - Altered `sessions` table to add `is_multi_track` and `multi_track_mode`.
+- **Master Multi-Track Report Generator** (`src/reports/generator.py`):
+  - Assembles 10-section Master Comparison Report (`R-<session_id>-multitrack.md`).
+  - Generates track-specific reports (`R-<session_id>-track-<track_id>.md`).
+- **Interactive Streamlit UI Extensions** (`ui/pages/new_research.py`, `ui/pages/results.py`, `ui/pages/history.py`):
+  - Dynamic multi-track builder with mode toggle in New Research.
+  - Mode A winner banner, Mode B per-track grid, cross-track comparison table, duplicate analysis, and drilldown tabs in Results.
+  - Multi-track session badge and master report downloads in History.
+- **Automated Test Suite (17 Scenarios)** (`tests/unit/test_multitrack.py`):
+  - 17 unit tests verifying single-track, two-track, 6-track, 8-track, distinct domain discoveries, shared Agent 1, independent track research, duplicate resolution, Mode A, Mode B, disqualification messages, honest rejection, judging mapping, sequential execution/GC, fault recovery, and backward compatibility.
+- **Documentation**:
+  - Comprehensive guide in `docs/MULTI_TRACK_RESEARCH.md`.
+
+---
+
 ## [Master Specification Implementation] — 2026-11-21
 
 ### Added:

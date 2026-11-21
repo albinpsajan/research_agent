@@ -7,6 +7,8 @@ import json
 import pandas as pd
 import streamlit as st
 
+from src.models.hackathon import MultiTrackMode
+from src.models.multitrack import MultiTrackPipelineResult
 from src.models.pipeline import PipelineResult
 from ui.components.common import (
     badge,
@@ -19,6 +21,13 @@ from ui.components.common import (
 
 
 def render() -> None:
+    multi_result: MultiTrackPipelineResult | None = st.session_state.get(
+        "current_multi_result"
+    )
+    if multi_result:
+        _render_multi_track(multi_result)
+        return
+
     result: PipelineResult | None = st.session_state.get("current_result")
     if not result:
         hero(
@@ -460,3 +469,233 @@ def _find_solution(result: PipelineResult, candidate_id: str):
         if candidate.id == candidate_id:
             return candidate
     return None
+
+
+def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
+    comp = multi.comparison
+    mode_a = multi.input.multi_track_mode == MultiTrackMode.BEST_OVERALL
+    hero(
+        multi.input.theme,
+        f"{multi.input.name or 'Multi-Track Hackathon'} · session "
+        f"`{multi.session_id[:8]}` · {len(multi.input.tracks)} Tracks · "
+        f"{'Mode A: Best Overall Track' if mode_a else 'Mode B: Best Idea Per Track'}",
+        eyebrow="Multi-Track Research Result",
+    )
+
+    # Metrics
+    total_domains = sum(
+        t.domain_map.total_domains_explored
+        for t in multi.track_results.values()
+        if t.domain_map
+    )
+    total_problems = sum(
+        t.domain_map.total_problems_found
+        for t in multi.track_results.values()
+        if t.domain_map
+    )
+    total_solutions = sum(
+        (
+            t.innovation_report.total_solutions_found
+            + t.innovation_report.total_github_projects
+        )
+        for t in multi.track_results.values()
+        if t.innovation_report
+    )
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Tracks", len(multi.input.tracks))
+    m2.metric("Total Domains", total_domains)
+    m3.metric("Total Problems", total_problems)
+    m4.metric("Solutions Scouted", total_solutions)
+    m5.metric("Duration", f"{multi.duration_seconds / 60:.1f} min")
+
+    if mode_a:
+        # Mode A: Best Overall Track
+        if comp and comp.overall_winning_candidate and comp.overall_winning_track:
+            w = comp.overall_winning_candidate
+            t = comp.overall_winning_track
+            st.markdown(
+                f"""
+                <div class="hiq-winner">
+                    <div class="label">Mode A · Best Overall Track Winner</div>
+                    <h2>Track: {t.name}</h2>
+                    <h3 style="margin-top: 4px; color: #f1f5f9;">{w.candidate_title}</h3>
+                    <div style="margin-top: 8px;">
+                        {badge(w.domain, "amber")}
+                        {badge(f"{w.total_score:.1f}/100", "ok")}
+                        {badge("all 10 gates passed" if w.all_gates_passed else "gate failure", "ok" if w.all_gates_passed else "bad")}
+                        {badge(f"rank #1 across all {len(multi.input.tracks)} tracks")}
+                    </div>
+                    <p class="hiq-muted" style="margin-top: 10px;">{w.overall_assessment[:700]}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.error(
+                "**No overall winner declared.** None of the candidates across all tracks passed every mandatory qualification gate."
+            )
+            st.caption(
+                "HackathonIQ maintains an honest standard across all evaluated tracks."
+            )
+    else:
+        # Mode B: Best Idea Per Track
+        st.markdown("### Best Idea Per Track Summary")
+        cols = st.columns(min(len(multi.input.tracks), 3) or 1)
+        for idx, track in enumerate(multi.input.tracks):
+            col = cols[idx % len(cols)]
+            winner_item = comp.best_per_track.get(track.id) if comp else None
+            with col:
+                st.markdown(f"#### {track.name}")
+                if winner_item and winner_item.evaluation:
+                    ev = winner_item.evaluation
+                    st.success(f"**{ev.candidate_title}**")
+                    st.caption(
+                        f"Score: **{ev.total_score:.1f}/100** · Domain: `{ev.domain}`"
+                    )
+                    st.markdown(f"*{ev.overall_assessment[:160]}...*")
+                else:
+                    st.warning(
+                        "**No qualifying problem statement found for this track.**"
+                    )
+                    st.caption(
+                        "Candidates in this track did not pass all mandatory quality gates."
+                    )
+
+    # Cross-track comparison table
+    if comp and comp.ranked_candidates:
+        st.markdown("### Cross-Track Candidates Comparison & Ranking")
+        rows = []
+        for rank, item in enumerate(comp.ranked_candidates, 1):
+            rows.append(
+                {
+                    "Rank": rank,
+                    "Track": item.track_name,
+                    "Candidate Title": item.candidate_title,
+                    "Domain": item.domain,
+                    "Score /100": f"{item.total_score:.1f}",
+                    "Gates Passed": (
+                        "All 10 Passed" if item.all_gates_passed else "Failed Gates"
+                    ),
+                    "Best-Fit Track": item.best_fit_track_name or item.track_name,
+                    "Overlapping": "Yes" if item.is_duplicate else "No",
+                }
+            )
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    # Runner-up Explanations (Mode A) or Comparative Notes
+    if comp and comp.runner_up_explanations:
+        with st.expander(
+            "Cross-Track Runner-Up Analysis & Evaluation Rationale", expanded=False
+        ):
+            for exp in comp.runner_up_explanations:
+                st.markdown(f"- {exp}")
+
+    # Duplicate resolution analysis
+    if comp and comp.duplicate_resolutions:
+        with st.expander(
+            "Cross-Track Overlap & Duplicate Deduplication", expanded=False
+        ):
+            st.markdown(
+                "The Cross-Track Comparison Engine analyzes semantic overlap across tracks "
+                "to ensure an idea is uniquely awarded to its most appropriate track."
+            )
+            dup_rows = []
+            for d in comp.duplicate_resolutions:
+                dup_rows.append(
+                    {
+                        "Candidate": d.candidate_title,
+                        "Original Track": d.original_track_name,
+                        "Assigned Track": d.best_fit_track_name,
+                        "Overlaps With": d.overlapping_with_title,
+                        "Similarity": f"{d.similarity_score:.2f}",
+                        "Rationale": d.resolution_rationale,
+                    }
+                )
+            st.dataframe(pd.DataFrame(dup_rows), use_container_width=True, hide_index=True)
+
+    # Track-by-track detailed drilldown
+    st.markdown("### Track-by-Track Detailed Breakdown")
+    track_names = [f"Track: {t.name}" for t in multi.input.tracks]
+    if track_names:
+        track_tabs = st.tabs(track_names)
+        for idx, track in enumerate(multi.input.tracks):
+            with track_tabs[idx]:
+                track_res = multi.track_results.get(track.id)
+                if not track_res:
+                    st.info(f"No result data for track {track.name}.")
+                    continue
+                if track_res.status == "failed":
+                    st.error(f"Track execution failed: {track_res.error}")
+                    continue
+
+                t_pipe_result = PipelineResult(
+                    session_id=multi.session_id,
+                    input=track_res.input,
+                    domain_map=track_res.domain_map,
+                    innovation_report=track_res.innovation_report,
+                    feasibility=track_res.feasibility,
+                    debates=track_res.debates or [],
+                    winner=track_res.winner,
+                    report=track_res.track_report,
+                    status=track_res.status,
+                )
+                t_has_winner = bool(
+                    track_res.winner
+                    and track_res.winner.has_winner
+                    and track_res.winner.winner
+                )
+
+                if t_has_winner:
+                    st.success(
+                        f"Track Winner: **{track_res.winner.winner.candidate_title}** "
+                        f"({track_res.winner.winner.total_score:.1f}/100)"
+                    )
+                else:
+                    st.warning(
+                        "**No qualifying problem statement found for this track.**"
+                    )
+
+                sub_tabs = st.tabs(
+                    [
+                        "Scoring & Gates",
+                        "Domains & Problems",
+                        "Solutions",
+                        "Debate",
+                        "Report",
+                    ]
+                )
+                with sub_tabs[0]:
+                    _render_scoring(t_pipe_result, t_has_winner)
+                with sub_tabs[1]:
+                    _render_domains(t_pipe_result)
+                with sub_tabs[2]:
+                    _render_solutions(t_pipe_result)
+                with sub_tabs[3]:
+                    _render_debate(t_pipe_result)
+                with sub_tabs[4]:
+                    _render_report(t_pipe_result)
+
+    # Master Multi-Track Report Download
+    st.markdown("### Master Multi-Track Comparison Report")
+    if multi.master_report:
+        master_md = multi.master_report.to_markdown()
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.download_button(
+                "Download Master Multi-Track Report (Markdown)",
+                data=master_md,
+                file_name=f"hackathoniq_{multi.session_id[:8]}_multitrack.md",
+                mime="text/markdown",
+                use_container_width=True,
+            )
+        with c2:
+            st.download_button(
+                "Download Multi-Track JSON Result",
+                data=multi.model_dump_json(indent=2),
+                file_name=f"hackathoniq_{multi.session_id[:8]}_multitrack.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        with st.expander("Master Report Preview", expanded=False):
+            st.markdown(master_md[:15000])

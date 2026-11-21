@@ -4,10 +4,30 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from enum import StrEnum
+from uuid import uuid4
+
 from pydantic import BaseModel, Field
 
 from src.models.provenance import CategorizedConstraint, ProvenanceCategory
 from src.utils.hackathon_time import utc_now
+
+
+class MultiTrackMode(StrEnum):
+    """User-selectable operating mode for multi-track hackathons."""
+
+    BEST_OVERALL = "best_overall"  # Mode A: Single strongest project opportunity across all tracks
+    BEST_PER_TRACK = "best_per_track"  # Mode B: Strongest qualifying project idea per track
+
+
+class HackathonTrack(BaseModel):
+    """An official track or theme within a multi-track hackathon."""
+
+    id: str = Field(default_factory=lambda: f"TRK-{uuid4().hex[:6]}")
+    name: str = Field(..., min_length=2, description="Track name")
+    description: str = Field(default="", description="Track description, scope or problem statement guidance")
+    track_rules: str = Field(default="", description="Track-specific constraints, rules, or judging criteria")
+    official_track_url: str = Field(default="", description="URL to official track documentation")
 
 
 class HackathonInput(BaseModel):
@@ -20,6 +40,14 @@ class HackathonInput(BaseModel):
     deadline: datetime | None = Field(default=None, description="Submission deadline")
     constraints: str | None = Field(default=None, description="Additional constraints")
     session_id: str | None = Field(default=None, description="Session identifier")
+
+    # Multi-track configuration
+    is_multi_track: bool = Field(default=False, description="Whether this hackathon features multiple distinct tracks")
+    multi_track_mode: MultiTrackMode = Field(
+        default=MultiTrackMode.BEST_OVERALL,
+        description="Operating mode: Best Overall Track (Mode A) or Best Idea Per Track (Mode B)",
+    )
+    tracks: list[HackathonTrack] = Field(default_factory=list, description="Supplied hackathon tracks")
 
 
 class OrganizerProfile(BaseModel):

@@ -30,25 +30,46 @@ class Repository:
         rules_url: str | None = None,
         deadline: str | None = None,
         constraints: str | None = None,
+        is_multi_track: bool = False,
+        multi_track_mode: str = "best_overall",
     ) -> str:
         """Create a new research session. Returns session ID."""
         session_id = str(uuid.uuid4())
         with self.db.transaction() as conn:
-            conn.execute(
-                """INSERT INTO sessions (id, hackathon_theme, hackathon_name, website_url, 
-                   rules_url, deadline, constraints, status) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'created')""",
-                (
-                    session_id,
-                    theme,
-                    name,
-                    website_url,
-                    rules_url,
-                    deadline,
-                    constraints,
-                ),
-            )
-        logger.info(f"Created session {session_id} for theme: {theme}")
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
+            if "is_multi_track" in cols:
+                conn.execute(
+                    """INSERT INTO sessions (id, hackathon_theme, hackathon_name, website_url, 
+                       rules_url, deadline, constraints, is_multi_track, multi_track_mode, status) 
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')""",
+                    (
+                        session_id,
+                        theme,
+                        name,
+                        website_url,
+                        rules_url,
+                        deadline,
+                        constraints,
+                        1 if is_multi_track else 0,
+                        multi_track_mode,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO sessions (id, hackathon_theme, hackathon_name, website_url, 
+                       rules_url, deadline, constraints, status) 
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'created')""",
+                    (
+                        session_id,
+                        theme,
+                        name,
+                        website_url,
+                        rules_url,
+                        deadline,
+                        constraints,
+                    ),
+                )
+        logger.info(f"Created session {session_id} for theme: {theme} (multi-track={is_multi_track})")
         return session_id
 
     def update_session_status(self, session_id: str, status: str) -> None:
@@ -653,3 +674,63 @@ class Repository:
                     utc_now().isoformat(),
                 ),
             )
+
+    # --- Multi-Track Support ---
+
+    def save_tracks(self, session_id: str, tracks: list[Any]) -> None:
+        """Save official hackathon tracks for a session."""
+        with self.db.transaction() as conn:
+            for t in tracks:
+                track_id = t.id if hasattr(t, "id") else t.get("id")
+                track_name = t.name if hasattr(t, "name") else t.get("name")
+                desc = t.description if hasattr(t, "description") else t.get("description", "")
+                rules = t.track_rules if hasattr(t, "track_rules") else t.get("track_rules", "")
+                url = t.official_track_url if hasattr(t, "official_track_url") else t.get("official_track_url", "")
+                conn.execute(
+                    """INSERT OR REPLACE INTO hackathon_tracks (id, session_id, track_name, description, track_rules, official_url)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (track_id, session_id, track_name, desc, rules, url),
+                )
+
+    def get_tracks(self, session_id: str) -> list[dict[str, Any]]:
+        """Retrieve tracks registered for a session."""
+        rows = self.db.fetch_all(
+            "SELECT * FROM hackathon_tracks WHERE session_id=? ORDER BY created_at",
+            (session_id,),
+        )
+        return [dict(r) for r in rows]
+
+    def save_multi_track_comparison(
+        self,
+        session_id: str,
+        mode: str,
+        winning_track_id: str | None,
+        winning_candidate_id: str | None,
+        comparison_data: Any,
+    ) -> int:
+        """Persist cross-track comparison and ranking result."""
+        data_json = json.dumps(comparison_data) if not isinstance(comparison_data, str) else comparison_data
+        with self.db.transaction() as conn:
+            cursor = conn.execute(
+                """INSERT INTO multi_track_comparisons (session_id, mode, winning_track_id, winning_candidate_id, comparison_json)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (session_id, mode, winning_track_id, winning_candidate_id, data_json),
+            )
+        return cursor.lastrowid
+
+    def get_multi_track_comparison(self, session_id: str) -> dict[str, Any] | None:
+        """Retrieve the latest cross-track comparison for a session."""
+        row = self.db.fetch_one(
+            "SELECT * FROM multi_track_comparisons WHERE session_id=? ORDER BY created_at DESC LIMIT 1",
+            (session_id,),
+        )
+        if not row:
+            return None
+        res = dict(row)
+        if "comparison_json" in res and res["comparison_json"]:
+            try:
+                res["comparison"] = json.loads(res["comparison_json"])
+            except Exception:
+                pass
+        return res
+

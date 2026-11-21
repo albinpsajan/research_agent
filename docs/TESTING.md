@@ -14,10 +14,10 @@ python -m pytest tests/ -v
 ```
 
 ### Current Test Suite Metrics (Verified):
-- **Total Tests**: 74
-- **Passed**: 73
-- **Skipped**: 1 (Real Ollama smoke test, skipped when offline)
-- **Execution Time**: ~10.5 seconds
+- **Total Tests**: 111
+- **Passed**: 109
+- **Skipped**: 2 (Real Ollama smoke tests, skipped when offline)
+- **Execution Time**: ~26 seconds
 - **Pass Rate**: 100%
 
 ---
@@ -26,6 +26,7 @@ python -m pytest tests/ -v
 
 | Test Module | Test Focus & Scope | Count | Status |
 | :--- | :--- | :---: | :---: |
+| `tests/unit/test_multitrack.py` | Multi-track hackathon intelligence: 17 exhaustive verification scenarios across Modes A & B, dynamic tracks (1, 2, 6, 8+), cross-track comparison, duplicate detection, fault recovery, and backward compatibility | 17 | `PASSED` |
 | `tests/unit/test_ten_gates.py` | Validates all 10 Mandatory Quality Gates, pass/fail scenarios, and General Theme Mode raw/normalized scoring | 13 | `PASSED` |
 | `tests/unit/test_playbook.py` | Schema validation, SQLite FTS5 search, seed data ingestion, agent-tailored retrieval, prompt formatting | 4 | `PASSED` |
 | `tests/unit/test_kerala_india_sources.py` | Catalog coverage (Kerala/India/Global), domain matching, targeted queries, 5-tier transferability taxonomy | 6 | `PASSED` |
@@ -33,7 +34,7 @@ python -m pytest tests/ -v
 | `tests/unit/test_phase3_regression.py` | Dynamic domain discovery, stopping reasons, evidence aggregation, gate failure categorization, GitHub query optimizer | 9 | `PASSED` |
 | `tests/unit/test_evidence.py` | SSRF/private IP rejection, DNS rebinding guards, URL sanitization, similarity clustering, finalist label extraction | 13 | `PASSED` |
 | `tests/unit/test_llm_json.py` | Robust JSON parsing: plain objects, markdown code fences, prose extraction, nested brackets, trailing comma repair | 6 | `PASSED` |
-| `tests/unit/test_repository.py` | SQLite session persistence, agent result storage, source deduplication, report round-tripping | 5 | `PASSED` |
+| `tests/unit/test_repository.py` | SQLite session persistence, agent result storage, source deduplication, track & multi-track comparison persistence | 5 | `PASSED` |
 | `tests/unit/test_storage.py` | 30 GB budget warnings, download guards blocking disk overrun, cache-only pruning safety | 3 | `PASSED` |
 | `tests/unit/test_config.py` | Rubric weight totals, invalid configuration rejection | 2 | `PASSED` |
 | `tests/unit/test_intelligence.py` | Continuous intelligence caching, source failure marking, honest theme lookup | 3 | `PASSED` |

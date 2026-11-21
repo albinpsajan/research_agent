@@ -7,8 +7,8 @@ from datetime import date, datetime, time, timedelta
 import streamlit as st
 
 from config.settings import get_settings
-from src.models.hackathon import HackathonInput
-from src.models.pipeline import PipelineOptions
+from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
+from src.models.pipeline import PipelineOptions, PipelineResult
 from src.orchestration.pipeline import HackathonPipeline
 from src.research.base import ResearchError, validate_public_url
 from src.storage.manager import StorageManager
@@ -80,6 +80,59 @@ def render() -> None:
             with c2:
                 chosen_time = st.time_input("Deadline time (local)", value=time(18, 0))
             deadline = datetime.combine(chosen_date, chosen_time)
+
+        st.markdown("### Multi-track hackathon support")
+        is_multi_track = st.checkbox(
+            "Enable Multi-Track Hackathon Research",
+            value=False,
+            help="Allows submitting multiple tracks. Evaluates each track independently and compares them.",
+        )
+        track_inputs: list[tuple[str, str, str, str]] = []
+        multi_track_mode = MultiTrackMode.BEST_OVERALL
+        if is_multi_track:
+            mode_choice = st.radio(
+                "Operating mode",
+                [
+                    "Mode A: Best Overall Track (identify the single strongest opportunity across all tracks)",
+                    "Mode B: Best Idea Per Track (identify the strongest qualifying idea independently for each track)",
+                ],
+                index=0,
+            )
+            multi_track_mode = (
+                MultiTrackMode.BEST_PER_TRACK
+                if "Mode B" in mode_choice
+                else MultiTrackMode.BEST_OVERALL
+            )
+            num_tracks = st.number_input(
+                "Number of tracks", min_value=1, max_value=30, value=2, step=1
+            )
+            st.caption(
+                "Define tracks below. Tracks can have only a name, or full descriptions and specific constraints."
+            )
+            for i in range(int(num_tracks)):
+                with st.expander(f"Track {i+1} Details", expanded=(i < 3)):
+                    t_name = st.text_input(
+                        f"Track {i+1} Name *",
+                        key=f"t_name_{i}",
+                        placeholder=f"e.g. Healthcare AI / Track {i+1}",
+                    )
+                    t_desc = st.text_area(
+                        f"Track {i+1} Description (optional)",
+                        key=f"t_desc_{i}",
+                        height=65,
+                    )
+                    c_tr1, c_tr2 = st.columns(2)
+                    with c_tr1:
+                        t_rules = st.text_input(
+                            f"Track {i+1} Specific Rules / Constraints (optional)",
+                            key=f"t_rules_{i}",
+                        )
+                    with c_tr2:
+                        t_url = st.text_input(
+                            f"Track {i+1} Official URL (optional)",
+                            key=f"t_url_{i}",
+                        )
+                    track_inputs.append((t_name, t_desc, t_rules, t_url))
 
         with st.expander("Research controls (defaults are recommended)"):
             c1, c2, c3, c4 = st.columns(4)
@@ -153,6 +206,29 @@ def render() -> None:
         st.error("No Ollama model is installed. Open Settings → Model to download one.")
         return
 
+    parsed_tracks: list[HackathonTrack] = []
+    if is_multi_track:
+        for idx, (t_name, t_desc, t_rules, t_url) in enumerate(track_inputs):
+            name_clean = t_name.strip()
+            if name_clean:
+                if t_url and t_url.strip():
+                    try:
+                        validate_public_url(t_url.strip())
+                    except ResearchError as exc:
+                        st.error(f"Track {idx+1} URL rejected: {exc}")
+                        return
+                parsed_tracks.append(
+                    HackathonTrack(
+                        name=name_clean,
+                        description=t_desc.strip() or None,
+                        track_rules=t_rules.strip() or None,
+                        official_track_url=t_url.strip() or None,
+                    )
+                )
+        if not parsed_tracks:
+            st.error("Please provide at least one valid track with a name.")
+            return
+
     full_constraints = []
     if constraints.strip():
         full_constraints.append(constraints.strip())
@@ -170,6 +246,9 @@ def render() -> None:
         rules_url=rules.strip() or None,
         deadline=deadline,
         constraints=combined_constraints,
+        is_multi_track=is_multi_track,
+        multi_track_mode=multi_track_mode,
+        tracks=parsed_tracks,
     )
     options = PipelineOptions(
         max_domains=max_domains,
@@ -196,7 +275,37 @@ def render() -> None:
         progress=on_progress,
     )
     with st.spinner("Agents are researching. Do not close the tab."):
-        result = pipeline.run(hackathon, options)
+        if is_multi_track:
+            multi_result = pipeline.run_multi_track(hackathon, options)
+            st.session_state["current_multi_result"] = multi_result
+            st.session_state["current_session_id"] = multi_result.session_id
+            winning_tid = (
+                multi_result.comparison.overall_winning_track.id
+                if (multi_result.comparison and multi_result.comparison.overall_winning_track)
+                else (parsed_tracks[0].id if parsed_tracks else None)
+            )
+            best_track_res = multi_result.track_results.get(winning_tid) if winning_tid else None
+            result = PipelineResult(
+                session_id=multi_result.session_id,
+                input=hackathon,
+                intelligence=multi_result.shared_intelligence,
+                domain_map=best_track_res.domain_map if best_track_res else None,
+                innovation_report=best_track_res.innovation_report if best_track_res else None,
+                feasibility=best_track_res.feasibility if best_track_res else None,
+                debates=best_track_res.debates if best_track_res else [],
+                winner=best_track_res.winner if best_track_res else None,
+                report=multi_result.master_report,
+                status=multi_result.status,
+                started_at=multi_result.started_at,
+                completed_at=multi_result.completed_at,
+                duration_seconds=multi_result.duration_seconds,
+            )
+            st.session_state["current_result"] = result
+        else:
+            st.session_state["current_multi_result"] = None
+            result = pipeline.run(hackathon, options)
+            st.session_state["current_result"] = result
+            st.session_state["current_session_id"] = result.session_id
 
     if result.status == "failed":
         st.error(f"Research failed: {result.error}")
@@ -206,9 +315,17 @@ def render() -> None:
         )
         return
 
-    st.session_state["current_result"] = result
-    st.session_state["current_session_id"] = result.session_id
-    if result.winner and result.winner.has_winner:
+    if is_multi_track and st.session_state.get("current_multi_result"):
+        comp = st.session_state["current_multi_result"].comparison
+        if comp and comp.overall_winning_candidate:
+            st.success(
+                f"Multi-track winner: {comp.overall_winning_candidate.candidate_title} "
+                f"in track '{comp.overall_winning_track.name}' "
+                f"({comp.overall_winning_candidate.total_score:.1f}/100)"
+            )
+        else:
+            st.warning("Multi-track research finished. Check Results for per-track outcomes.")
+    elif result.winner and result.winner.has_winner:
         st.success(
             f"Winner selected: {result.winner.winner.candidate_title} "
             f"({result.winner.winner.total_score:.1f}/100)"

@@ -80,11 +80,18 @@ count, model speed and network conditions. Research quality is prioritised over 
 
 ---
 
-## Two modes
+## Two modes + Multi-Track Research
 
-### A. Hackathon Research Mode
-A one-shot, five-agent workflow for a specific hackathon. Reuses stored Continuous
+### A. Hackathon Research Mode (Single & Multi-Track)
+A deep, five-agent workflow for a specific hackathon. Reuses stored Continuous
 Intelligence signals when enabled, but never requires them.
+- **Single-Track Mode**: Researches the central theme from organizer expectations to a single winning problem statement.
+- **Multi-Track Mode**: Evaluates an arbitrary number of tracks (1, 2, 6, 8+ tracks):
+  - **Shared Organizer Research**: Agent 1 runs once across all tracks to establish common criteria.
+  - **Sequential Track Pipeline**: Agents 2–5 research each track independently in sequential order, preserving GPU VRAM (RTX 3050 6GB) via `gc.collect()`.
+  - **Mode A (Best Overall Track)**: Selects the single strongest idea across all tracks with runner-up explanations.
+  - **Mode B (Best Idea Per Track)**: Crowns the top idea for every track independently; for disqualified tracks, reports: *"No qualifying problem statement found for this track."*
+  - **Cross-Track Comparison Engine**: Employs token Jaccard similarity (0.58) to identify cross-track duplicates and assign best-fit tracks.
 
 ### B. Continuous Global Intelligence Mode
 A local, provenance-tracked knowledge base refreshed manually or on a schedule:
@@ -98,22 +105,25 @@ A local, provenance-tracked knowledge base refreshed manually or on a schedule:
 
 ---
 
-## Quality controls
+## Quality controls & Ten Mandatory Gates
 
 **100-point rubric** (weights must total 100, validated at startup):
 problem significance 15 · originality 15 · technical feasibility 15 · theme relevance 15 ·
 organiser/sponsor alignment 10 · innovation 10 · implementation within deadline 10 ·
-demonstration appeal 10.
+demonstration appeal 10. In General Theme Mode, Organizer Alignment (10 pts) is unassessable and scores are normalized to 100.
 
-**Seven mandatory gates** (deterministic checks, not LLM discretion):
+**Ten mandatory quality gates** (deterministic checks, not LLM discretion):
 
-1. Credible evidence of the problem
-2. Existing-solution investigation
-3. Honest originality classification
-4. Practical implementation path
-5. Realistic hackathon deadline
-6. Risk and disadvantage assessment
-7. Compliance with hackathon rules
+1. Theme and Judging Alignment
+2. Real-World Problem Validation ($\ge 2$ independent sources, credibility $\ge 0.60$)
+3. Kerala and India Relevance (14 official portals, district-level specificity)
+4. Existing-Solution Investigation (GitHub repositories & arXiv papers)
+5. Genuine Innovation and Differentiation ($\ge 30$ characters unique differentiation)
+6. Global-to-Local Adaptability (5-tier transferability taxonomy: Tiers A through E)
+7. Technical Feasibility and Data Availability (zero unavailable dependencies)
+8. Economic and Practical Viability (zero mandatory paid cloud AI APIs)
+9. Hackathon Buildability and Demonstration ($\le 1.15 \times \text{deadline}$, 3-minute hero flow)
+10. Risk, Ethics and Sustainability ($\ge 2$ risks, $\ge 1$ disadvantage, $\ge 1$ mitigation)
 
 A high rubric score **cannot** conceal a failed gate. A candidate with any failed gate is
 disqualified. If no candidate qualifies, no winner is declared and the report explains why.

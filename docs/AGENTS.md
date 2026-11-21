@@ -182,3 +182,24 @@ HackathonInput
 
 Each stage persists its output to `agent_results`, so a failed run still has a
 recoverable audit trail and History can reconstruct partial sessions.
+
+---
+
+## Multi-Track Agent Operation
+
+When a multi-track hackathon is submitted:
+1. **Agent 1 executes once**: Synthesizes organizer preferences, judging criteria, and general theme constraints into `shared_intelligence`.
+2. **Agents 2 through 5 iterate sequentially across tracks**:
+   - Each track receives the shared organizer intelligence combined with track-specific names, descriptions, constraints, and URLs.
+   - Agent 2 dynamically discovers domains specific to that track's problem space.
+   - Agent 3 searches GitHub repositories and arXiv papers relevant to that track's domains.
+   - Agent 4 drafts buildable architectures and regional adaptations for that track.
+   - Agent 5 challenges finalists, applies the 100-point rubric, and enforces the 10 mandatory qualification gates.
+   - A track report is generated and persisted (`R-<session_id>-track-<track_id>.md`).
+3. **Cross-Track Comparison Engine (`CrossTrackComparisonEngine`)**:
+   - Collects all track candidates.
+   - Detects duplicates across tracks (token Jaccard threshold = 0.58).
+   - In Mode A: identifies the single overall winner and synthesizes runner-up explanations.
+   - In Mode B: identifies the top qualifying idea per track, or issues: `"No qualifying problem statement found for this track."`
+   - Generates the master multi-track comparison report (`R-<session_id>-multitrack.md`).
+

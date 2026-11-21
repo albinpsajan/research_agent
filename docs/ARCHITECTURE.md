@@ -156,3 +156,25 @@ flowchart TD
   9. Hackathon Buildability and Demonstration (hours <= 1.15 * deadline, demo plan)
   10. Risk, Ethics and Sustainability (>= 2 risks, >= 1 disadvantage, >= 1 mitigation)
 - **100-Point Scoring Rubric**: In General Theme Mode, Organizer Alignment (10 pts) is unassessable; raw score is calculated out of 90 and normalized to 100.
+
+---
+
+## 5. Multi-Track Architecture & Cross-Track Comparison
+
+HackathonIQ natively supports competitions with an arbitrary number of tracks (e.g. 1, 2, 6, 8+ tracks) via `HackathonPipeline.run_multi_track()` and `CrossTrackComparisonEngine`.
+
+### 1. Two-Tier Execution Model
+- **Shared Organizer Research (Agent 1)**: Executed once per multi-track run. Analyzes organizer background, rules, and overarching criteria to establish a shared intelligence context (`shared_intelligence`).
+- **Sequential Track Pipeline (Agents 2–5)**: Runs independently per track in strict sequential order. Each track discovers specialized domains, conducts gap analysis, drafts buildable architectures, undergoes adversarial debate, and generates an individual track report (`R-<session_id>-track-<track_id>.md`).
+
+### 2. Cross-Track Comparison Engine (`src/evaluation/cross_track_comparison.py`)
+- **Mode A (Best Overall Track)**: Cross-compares all qualifying candidates across all tracks under uniform standards to crown the single most defensible overall winner, with explicit comparative explanations for runner-ups.
+- **Mode B (Best Idea Per Track)**: Crowns the top qualifying idea independently for each track. For tracks failing any of the 10 gates, it outputs: `"No qualifying problem statement found for this track."`
+- **Duplicate & Overlap Detection**: Uses token Jaccard similarity (threshold 0.58) to detect candidates submitted across tracks, allocating them to their best-fit track based on track descriptions and preventing cross-track cannibalization.
+
+### 3. Resource & Laptop GPU Safeguards
+- Runs on local Ryzen 5 + RTX 3050 Laptop GPU (6 GB VRAM) with zero concurrency spikes.
+- Enforces explicit `gc.collect()` after each track execution.
+- Employs intermediate SQLite state persistence and fault-tolerant error boundaries per track.
+- Generates master cross-track intelligence reports (`R-<session_id>-multitrack.md`).
+

@@ -16,11 +16,17 @@ from src.agents.innovation_research import InnovationResearchAgent
 from src.agents.solution_architect import SolutionArchitectAgent
 from src.database.migrations import initialize_database
 from src.database.repository import Repository
+from src.evaluation.cross_track_comparison import CrossTrackComparisonEngine
 from src.intelligence.service import ContinuousIntelligenceService
 from src.llm.client import LLMClientProtocol, OllamaClient
 from src.models.candidate import FeasibilityReport
 from src.models.evaluation import FinalEvaluationReport, WinnerSelection
-from src.models.hackathon import HackathonInput
+from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
+from src.models.multitrack import (
+    CrossTrackComparisonResult,
+    MultiTrackPipelineResult,
+    TrackResult,
+)
 from src.models.pipeline import PipelineOptions, PipelineResult
 from src.models.research import InnovationReport
 from src.orchestration.state import PipelineState
@@ -84,6 +90,31 @@ class HackathonPipeline:
         *,
         session_id: str | None = None,
     ) -> PipelineResult:
+        if hackathon.is_multi_track and hackathon.tracks:
+            multi_result = self.run_multi_track(hackathon, options, session_id=session_id)
+            comp = multi_result.comparison
+            winning_tid = (
+                comp.overall_winning_track.id
+                if comp and comp.overall_winning_track
+                else (hackathon.tracks[0].id if hackathon.tracks else None)
+            )
+            best_track_res = multi_result.track_results.get(winning_tid) if winning_tid else None
+            return PipelineResult(
+                session_id=multi_result.session_id,
+                input=hackathon,
+                intelligence=multi_result.shared_intelligence,
+                domain_map=best_track_res.domain_map if best_track_res else None,
+                innovation_report=best_track_res.innovation_report if best_track_res else None,
+                feasibility=best_track_res.feasibility if best_track_res else None,
+                debates=best_track_res.debates if best_track_res else [],
+                winner=best_track_res.winner if best_track_res else None,
+                report=multi_result.master_report,
+                status=multi_result.status,
+                started_at=multi_result.started_at,
+                completed_at=multi_result.completed_at,
+                duration_seconds=multi_result.duration_seconds,
+            )
+
         options = options or PipelineOptions(
             max_domains=self.settings.agent.max_domains,
             problems_per_domain=self.settings.agent.problems_per_domain,
@@ -100,6 +131,7 @@ class HackathonPipeline:
                 rules_url=hackathon.rules_url,
                 deadline=hackathon.deadline.isoformat() if hackathon.deadline else None,
                 constraints=hackathon.constraints,
+                is_multi_track=False,
             )
         hackathon.session_id = session_id
         self.repository.update_session_status(session_id, "running")
@@ -194,6 +226,322 @@ class HackathonPipeline:
             )
             result.finalize()
             return result
+
+    def run_multi_track(
+        self,
+        hackathon: HackathonInput,
+        options: PipelineOptions | None = None,
+        *,
+        session_id: str | None = None,
+    ) -> MultiTrackPipelineResult:
+        """Execute complete multi-track research and cross-track evaluation."""
+        options = options or PipelineOptions(
+            max_domains=self.settings.agent.max_domains,
+            problems_per_domain=self.settings.agent.problems_per_domain,
+            max_finalists=self.settings.agent.max_finalists,
+            max_debate_rounds=self.settings.agent.max_debate_rounds,
+        )
+        initialize_database(self.repository.db)
+        self.storage.ensure_dirs()
+        started = utc_now()
+
+        if not session_id:
+            session_id = self.repository.create_session(
+                theme=hackathon.theme,
+                name=hackathon.name,
+                website_url=hackathon.website_url,
+                rules_url=hackathon.rules_url,
+                deadline=hackathon.deadline.isoformat() if hackathon.deadline else None,
+                constraints=hackathon.constraints,
+                is_multi_track=True,
+                multi_track_mode=hackathon.multi_track_mode.value,
+            )
+        hackathon.session_id = session_id
+        self.repository.save_tracks(session_id, hackathon.tracks)
+        self.repository.update_session_status(session_id, "running")
+
+        # 1. Shared Organizer Research (Agent 1 once)
+        self._emit("shared_intelligence", "Agent 1 — Shared Hackathon Intelligence (once across all tracks)", 0.05)
+        context = ""
+        if options.include_continuous_intelligence:
+            try:
+                intel_ctx = self.intelligence.context_for_theme(hackathon.theme)
+                context = self.intelligence.context_as_prompt(intel_ctx)
+                self.repository.save_agent_result(
+                    session_id,
+                    "continuous_intelligence",
+                    "reused_context",
+                    intel_ctx.model_dump(mode="json"),
+                )
+            except Exception as exc:
+                logger.warning(f"Continuous intelligence context failed: {exc}")
+
+        shared_agent = HackathonIntelligenceAgent(
+            self.llm, self.research, self.repository, self.settings.agent
+        )
+        shared_intelligence = shared_agent.run(
+            session_id,
+            hackathon,
+            intelligence_context=context,
+        )
+        del shared_agent
+        gc.collect()
+
+        self.repository.save_agent_result(
+            session_id,
+            "shared_intelligence",
+            "hackathon_intelligence",
+            shared_intelligence.model_dump(mode="json"),
+        )
+
+        # 2. Sequential Track Research & Evaluation
+        track_results: dict[str, TrackResult] = {}
+        total_tracks = len(hackathon.tracks)
+        report_generator = ReportGenerator(self.repository)
+
+        for idx, track in enumerate(hackathon.tracks):
+            track_start = utc_now()
+            progress_frac = 0.10 + 0.75 * (idx / max(1, total_tracks))
+            self._emit(
+                f"track_{track.id}",
+                f"Processing Track {idx + 1}/{total_tracks}: '{track.name}' (Sequential Resource-Safe Mode)",
+                progress_frac,
+            )
+
+            # Build track-specific HackathonInput
+            track_theme = f"{hackathon.theme} — Track: {track.name}"
+            if track.description and track.description.strip():
+                track_theme += f" ({track.description.strip()})"
+
+            track_constraints = hackathon.constraints or ""
+            if track.track_rules and track.track_rules.strip():
+                track_constraints = f"{track_constraints}; Track Rules: {track.track_rules.strip()}".strip("; ")
+
+            track_input = HackathonInput(
+                theme=track_theme,
+                name=hackathon.name,
+                website_url=track.official_track_url or hackathon.website_url,
+                rules_url=hackathon.rules_url,
+                deadline=hackathon.deadline,
+                constraints=track_constraints,
+                session_id=session_id,
+            )
+
+            # Build track-specific HackathonIntelligence
+            track_intel = shared_intelligence.model_copy(deep=True)
+            track_intel.hackathon_input = track_input
+            if track.track_rules and track.track_rules.strip():
+                track_intel.technical_restrictions.append(f"Track constraint: {track.track_rules.strip()}")
+
+            try:
+                # Agent 2: Dynamic Domain Discovery tailored to this track
+                d_agent = DomainDiscoveryAgent(
+                    self.llm, self.research, self.repository, self.settings.agent
+                )
+                domain_map = d_agent.run(
+                    session_id,
+                    track_input.theme,
+                    track_intel,
+                    intelligence_context=context,
+                    max_domains=options.max_domains,
+                    domain_exploration_budget=options.domain_exploration_budget,
+                    min_domain_relevance=options.min_domain_relevance,
+                    problems_per_domain=options.problems_per_domain,
+                )
+                del d_agent
+                gc.collect()
+
+                # Agent 3: Global Innovation Research for this track
+                problems = domain_map.problem_candidates if domain_map else []
+                if problems:
+                    i_agent = InnovationResearchAgent(
+                        self.llm, self.research, self.repository, self.settings.agent
+                    )
+                    innovation = i_agent.run(
+                        session_id,
+                        problems,
+                        theme=track_input.theme,
+                        intelligence_context=context,
+                    )
+                    del i_agent
+                    gc.collect()
+                else:
+                    innovation = InnovationReport()
+
+                # Agent 4: Solution Architecture for this track
+                if problems:
+                    s_agent = SolutionArchitectAgent(
+                        self.llm, self.research, self.repository, self.settings.agent
+                    )
+                    feasibility = s_agent.run(
+                        session_id,
+                        problems,
+                        innovation.gaps if innovation else [],
+                        track_input,
+                        track_intel,
+                        max_finalists=options.max_finalists,
+                        intelligence_context=context,
+                    )
+                    del s_agent
+                    gc.collect()
+                else:
+                    feasibility = FeasibilityReport()
+
+                # Agent 5: Adversarial Debate & 10 Mandatory Quality Gates
+                candidates = feasibility.candidates if feasibility else []
+                if candidates:
+                    c_agent = AdversarialCriticAgent(
+                        self.llm,
+                        self.research,
+                        self.repository,
+                        self.settings.agent,
+                    )
+                    final_eval = c_agent.run(
+                        session_id,
+                        candidates,
+                        problems,
+                        innovation.gaps if innovation else [],
+                        track_input,
+                        track_intel,
+                        max_rounds=options.max_debate_rounds,
+                    )
+                    del c_agent
+                    gc.collect()
+                else:
+                    final_eval = FinalEvaluationReport(
+                        winner=WinnerSelection(
+                            has_winner=False,
+                            rejection_reason=f"No feasible candidate survived in track '{track.name}'.",
+                            selection_methodology="No finalists generated for this track.",
+                        ),
+                        scoring_methodology="No finalists to score.",
+                    )
+
+                track_elapsed = (utc_now() - track_start).total_seconds()
+
+                # Build Track PipelineResult to generate 24-section track report
+                track_pipe_res = PipelineResult(
+                    session_id=session_id,
+                    input=track_input,
+                    intelligence=track_intel,
+                    domain_map=domain_map,
+                    innovation_report=innovation,
+                    feasibility=feasibility,
+                    debates=final_eval.debates,
+                    winner=final_eval.winner,
+                    status="completed" if (final_eval.winner and final_eval.winner.has_winner) else "completed_no_winner",
+                    started_at=track_start,
+                )
+                track_pipe_res.finalize()
+
+                track_report = report_generator.generate(
+                    track_pipe_res, final_eval, track_id=track.id
+                )
+                track_report_path = f"data/reports/{track_report.metadata.report_id}.md"
+
+                track_res = TrackResult(
+                    track=track,
+                    input=track_input,
+                    domain_map=domain_map,
+                    innovation_report=innovation,
+                    feasibility=feasibility,
+                    debates=final_eval.debates,
+                    winner=final_eval.winner,
+                    report=track_report,
+                    report_path=track_report_path,
+                    status=track_pipe_res.status,
+                    duration_seconds=track_elapsed,
+                )
+                track_results[track.id] = track_res
+
+                # Persist intermediate track summary to repository
+                self.repository.save_agent_result(
+                    session_id,
+                    f"track_{track.id}",
+                    "track_summary",
+                    {
+                        "track_id": track.id,
+                        "track_name": track.name,
+                        "status": track_res.status,
+                        "has_winner": bool(final_eval.winner and final_eval.winner.has_winner),
+                        "duration_seconds": track_elapsed,
+                    },
+                )
+
+            except Exception as exc:
+                logger.exception(f"Track '{track.name}' ({track.id}) encountered an error")
+                track_elapsed = (utc_now() - track_start).total_seconds()
+                track_results[track.id] = TrackResult(
+                    track=track,
+                    input=track_input,
+                    status="failed",
+                    error=f"{type(exc).__name__}: {exc}",
+                    duration_seconds=track_elapsed,
+                )
+                self.repository.save_agent_result(
+                    session_id,
+                    f"track_{track.id}",
+                    "track_error",
+                    {"error": str(exc), "error_type": type(exc).__name__},
+                )
+
+            # Garbage collect between tracks to ensure memory remains stable
+            gc.collect()
+
+        # 3. Cross-Track Comparison Engine
+        self._emit("cross_track_comparison", "Evaluating and ranking candidates across all tracks", 0.90)
+        comparison_engine = CrossTrackComparisonEngine()
+        comparison_result = comparison_engine.compare(
+            track_results=track_results,
+            mode=hackathon.multi_track_mode,
+            shared_intelligence=shared_intelligence,
+        )
+
+        # Persist comparison to DB
+        winning_tid = (
+            comparison_result.overall_winning_track.id
+            if comparison_result.overall_winning_track
+            else None
+        )
+        winning_cid = (
+            comparison_result.overall_winning_candidate.id
+            if comparison_result.overall_winning_candidate
+            else None
+        )
+        self.repository.save_multi_track_comparison(
+            session_id=session_id,
+            mode=hackathon.multi_track_mode.value,
+            winning_track_id=winning_tid,
+            winning_candidate_id=winning_cid,
+            comparison_data=comparison_result.model_dump(mode="json"),
+        )
+
+        # 4. Master Multi-Track Report Generation
+        self._emit("master_report", "Generating master cross-track comparison report", 0.95)
+        has_any_winner = bool(
+            comparison_result.overall_winning_candidate
+            or any(w for w in comparison_result.per_track_winners.values())
+        )
+        overall_status = "completed" if has_any_winner else "completed_no_winner"
+
+        multi_result = MultiTrackPipelineResult(
+            session_id=session_id,
+            input=hackathon,
+            shared_intelligence=shared_intelligence,
+            track_results=track_results,
+            comparison=comparison_result,
+            status=overall_status,
+            started_at=started,
+        )
+        master_report = report_generator.generate_multi_track_report(multi_result)
+        multi_result.master_report = master_report
+        multi_result.master_report_path = f"data/reports/{master_report.metadata.report_id}.md"
+        multi_result.finalize()
+
+        self.repository.update_session_status(session_id, multi_result.status)
+        self._emit("finalize", "Multi-track hackathon research completed", 1.0)
+        return multi_result
+
 
     # ------------------------------------------------------------------
     # Graph

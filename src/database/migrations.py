@@ -40,6 +40,34 @@ MIGRATIONS: tuple[Migration, ...] = (
             ON debate_history(session_id, candidate_id, round_number);
         """,
     ),
+    Migration(
+        3,
+        "Multi-track hackathon support and cross-track comparisons",
+        """
+        CREATE TABLE IF NOT EXISTS hackathon_tracks (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL REFERENCES sessions(id),
+            track_name TEXT NOT NULL,
+            description TEXT,
+            track_rules TEXT,
+            official_url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS multi_track_comparisons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL REFERENCES sessions(id),
+            mode TEXT NOT NULL,
+            winning_track_id TEXT,
+            winning_candidate_id TEXT,
+            comparison_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_tracks_session ON hackathon_tracks(session_id);
+        CREATE INDEX IF NOT EXISTS idx_multi_track_comparisons_session ON multi_track_comparisons(session_id);
+        ALTER TABLE sessions ADD COLUMN is_multi_track INTEGER DEFAULT 0;
+        ALTER TABLE sessions ADD COLUMN multi_track_mode TEXT DEFAULT 'best_overall';
+        """,
+    ),
 )
 
 
