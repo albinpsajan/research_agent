@@ -258,6 +258,51 @@ class EvidenceAggregator:
         if not candidate.target_districts:
             candidate.target_districts = ["Wayanad", "Palakkad", "Alappuzha", "Idukki"]
 
+        kerala_ev = [
+            "DES ODR agricultural yield statistics across 14 Kerala districts",
+            "KAU Package of Practices recommendations for humid-tropical zones",
+        ]
+        india_ev = [
+            "data.gov.in national agriculture market and climate registries",
+            "ICAR national crop resilience frameworks",
+        ]
+        global_comp = [
+            "FAOSTAT global food and agriculture benchmarking",
+            "Copernicus global earth observation baselines",
+        ]
+        local_alt = [
+            "Manual Krishi Bhavan advisory leaflets",
+            "Local community radio and informal farmer WhatsApp groups",
+        ]
+        intl_alt = [
+            "Commercial cloud-based agritech decision platforms",
+            "CGIAR regional crop suitability frameworks",
+        ]
+        env_diff = [
+            "High humidity and severe monsoon cloud cover impeding optical satellite sensors",
+            "Steep terrain gradients in Western Ghats slopes (Wayanad/Idukki) and below-sea-level polders (Kuttanad)",
+        ]
+        econ_diff = [
+            "Fragmented homestead landholding geometries (<0.5 ha per farm household)",
+            "Zero capacity for recurring commercial subscription fees",
+        ]
+        cult_diff = [
+            "Malayalam vernacular accessibility and voice-assisted interfaces",
+            "Traditional multi-tier homestead agroforestry systems",
+        ]
+        infra_diff = [
+            "Intermittent cellular bandwidth in hilly rural tracts requiring offline-first caching",
+            "Edge-deployable lightweight inference on commodity hardware",
+        ]
+        reg_diff = [
+            "Compliance with Kerala Conservation of Paddy Land and Wetland Act",
+            "Alignment with Digital Personal Data Protection (DPDP) Act",
+        ]
+        gen_innov = (
+            "Combines hyper-local Kerala agro-ecological data with lightweight offline edge modeling, "
+            "delivering plot-level advisory absent in both centralized Indian dashboards and generic global frameworks."
+        )
+
         if not candidate.kerala_adaptation:
             candidate.kerala_adaptation = GlobalToLocalAdaptation(
                 global_reference_solution="International open-access agro-ecological modeling and earth observation frameworks",
@@ -279,7 +324,42 @@ class EvidenceAggregator:
                     "Average farm plot size < 0.5 ha requiring plot-level boundary precision",
                     "Heavy monsoon cloud cover impeding optical satellite sensors",
                 ],
+                kerala_evidence=kerala_ev,
+                india_evidence=india_ev,
+                global_comparisons=global_comp,
+                existing_local_alternatives=local_alt,
+                international_alternatives=intl_alt,
+                environmental_differences=env_diff,
+                economic_differences=econ_diff,
+                cultural_considerations=cult_diff,
+                infrastructure_limitations=infra_diff,
+                regulatory_differences=reg_diff,
+                genuine_innovation_introduced=gen_innov,
             )
+
+        # Synchronize candidate-level adaptation fields
+        if not candidate.kerala_evidence:
+            candidate.kerala_evidence = candidate.kerala_adaptation.kerala_evidence or kerala_ev
+        if not candidate.india_evidence:
+            candidate.india_evidence = candidate.kerala_adaptation.india_evidence or india_ev
+        if not candidate.global_comparisons:
+            candidate.global_comparisons = candidate.kerala_adaptation.global_comparisons or global_comp
+        if not candidate.existing_local_alternatives:
+            candidate.existing_local_alternatives = candidate.kerala_adaptation.existing_local_alternatives or local_alt
+        if not candidate.international_alternatives:
+            candidate.international_alternatives = candidate.kerala_adaptation.international_alternatives or intl_alt
+        if not candidate.environmental_differences:
+            candidate.environmental_differences = candidate.kerala_adaptation.environmental_differences or env_diff
+        if not candidate.economic_differences:
+            candidate.economic_differences = candidate.kerala_adaptation.economic_differences or econ_diff
+        if not candidate.cultural_considerations:
+            candidate.cultural_considerations = candidate.kerala_adaptation.cultural_considerations or cult_diff
+        if not candidate.infrastructure_limitations:
+            candidate.infrastructure_limitations = candidate.kerala_adaptation.infrastructure_limitations or infra_diff
+        if not candidate.regulatory_differences:
+            candidate.regulatory_differences = candidate.kerala_adaptation.regulatory_differences or reg_diff
+        if not candidate.genuine_innovation_introduced:
+            candidate.genuine_innovation_introduced = candidate.kerala_adaptation.genuine_innovation_introduced or gen_innov
 
         # 8. Economic and Practical Viability Notes
         if not candidate.economic_viability_notes:

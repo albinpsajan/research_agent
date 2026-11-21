@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from src.models.candidate import CandidateSolution
 from src.models.research import (
     AdaptabilityClassification,
     GlobalToLocalAdaptation,
 )
+from src.research.evidence_aggregator import EvidenceAggregator
 from src.research.sources import (
     KeralaIndiaSourceRegistry,
     OfficialSource,
@@ -93,3 +95,75 @@ def test_global_to_local_adaptation_five_tiers():
     assert len(adaptation.required_modifications) == 2
     assert len(adaptation.local_constraints) == 2
     assert "Wayanad" in adaptation.kerala_applicability
+
+
+def test_recommend_sources_healthcare_and_epidemiology():
+    registry = KeralaIndiaSourceRegistry()
+    recs = registry.recommend_sources("rural telemedicine dengue disease surveillance", geography="all", limit=5)
+
+    assert len(recs) > 0
+    rec_ids = [r.id for r in recs]
+    # Should recommend DHS Kerala, ICMR, or WHO
+    assert any(rid in {"KL-006", "IN-007", "GL-005"} for rid in rec_ids)
+
+
+def test_recommend_sources_education_and_vernacular():
+    registry = KeralaIndiaSourceRegistry()
+    recs = registry.recommend_sources("vernacular education literacy public governance", geography="all", limit=5)
+
+    assert len(recs) > 0
+    rec_ids = [r.id for r in recs]
+    # Should recommend UNESCO, UNICEF, Kerala Open Data, or MoSPI
+    assert any(rid in {"GL-006", "GL-007", "KL-001", "IN-006"} for rid in rec_ids)
+
+
+def test_verify_source_connectivity():
+    registry = KeralaIndiaSourceRegistry()
+    res = registry.verify_source_connectivity("KL-003")
+    assert res["source_id"] == "KL-003"
+    assert "KAU" in res["name"]
+    assert res["is_configured"] is True
+
+    unknown = registry.verify_source_connectivity("UNKNOWN-999")
+    assert unknown["status"] == "unknown_source"
+    assert unknown["is_configured"] is False
+
+
+def test_candidate_solution_adaptation_dimensions_enrichment():
+    cand = CandidateSolution(
+        id="C01",
+        problem_candidate_id="P01",
+        problem_statement="Smallholders struggle with erratic rainfall in homestead plots.",
+    )
+    EvidenceAggregator.enrich_candidate_solution(cand)
+
+    assert cand.kerala_adaptation is not None
+    assert len(cand.kerala_evidence) >= 2
+    assert len(cand.india_evidence) >= 2
+    assert len(cand.global_comparisons) >= 2
+    assert len(cand.existing_local_alternatives) >= 2
+    assert len(cand.international_alternatives) >= 2
+    assert len(cand.environmental_differences) >= 2
+    assert len(cand.economic_differences) >= 2
+    assert len(cand.cultural_considerations) >= 2
+    assert len(cand.infrastructure_limitations) >= 2
+    assert len(cand.regulatory_differences) >= 2
+    assert len(cand.genuine_innovation_introduced) > 30
+
+
+def test_all_five_adaptation_tiers_distinct_properties():
+    tier_descriptions = {
+        AdaptabilityClassification.TIER_A_DIRECT: "Direct transfer with parameter tuning",
+        AdaptabilityClassification.TIER_B_MODIFIED: "Adaptable with local data and Malayalam language",
+        AdaptabilityClassification.TIER_C_REDESIGN: "Requires fundamental redesign for tropical realities",
+        AdaptabilityClassification.TIER_D_NON_TRANSFERABLE: "Incompatible due to geographic differences",
+        AdaptabilityClassification.TIER_E_LOCALLY_ORIGINATED: "Native innovation born from local Kuttanad/Wayanad conditions",
+    }
+    assert len(tier_descriptions) == 5
+    for tier, desc in tier_descriptions.items():
+        adapt = GlobalToLocalAdaptation(
+            transferability_tier=tier,
+            kerala_applicability=desc,
+        )
+        assert adapt.transferability_tier == tier
+        assert len(adapt.kerala_applicability) > 0

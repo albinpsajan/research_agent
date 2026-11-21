@@ -14,6 +14,7 @@ def test_ui_modules_import() -> None:
     import ui.pages.history
     import ui.pages.intelligence
     import ui.pages.new_research
+    import ui.pages.playbook
     import ui.pages.results
     import ui.pages.settings
 
@@ -23,16 +24,7 @@ def test_ui_modules_import() -> None:
             ui.pages.history,
             ui.pages.intelligence,
             ui.pages.new_research,
-            ui.pages.results,
-            ui.pages.settings,
-        ]
-    )
-    assert all(
-        [
-            ui.components.common,
-            ui.pages.history,
-            ui.pages.intelligence,
-            ui.pages.new_research,
+            ui.pages.playbook,
             ui.pages.results,
             ui.pages.settings,
         ]

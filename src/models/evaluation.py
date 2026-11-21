@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.utils.hackathon_time import utc_now
 
@@ -17,6 +18,13 @@ class QualityGateStatus(StrEnum):
     NOT_EVALUATED = "not_evaluated"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
     NOT_APPLICABLE = "not_applicable"
+
+
+class EvaluationVersion(StrEnum):
+    """Evaluation framework version distinguishing historical 7-gate runs from 10-gate master runs."""
+
+    V1_SEVEN_GATE = "v1_seven_gate"
+    V2_TEN_GATE = "v2_ten_gate"
 
 
 class QualityGate(BaseModel):
@@ -53,6 +61,7 @@ class CandidateEvaluation(BaseModel):
     raw_score: float = 0.0
     normalized_score: float = 0.0
     is_general_theme_mode: bool = False
+    evaluation_version: EvaluationVersion = EvaluationVersion.V2_TEN_GATE
     quality_gates: list[QualityGate] = Field(default_factory=list)
     all_gates_passed: bool = False
     overall_assessment: str = ""
@@ -61,6 +70,15 @@ class CandidateEvaluation(BaseModel):
     debate_recommendation: str = ""
     is_qualified: bool = False
     rank: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def detect_version_from_gates(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            gates = data.get("quality_gates") or []
+            if len(gates) == 7 and "evaluation_version" not in data:
+                data["evaluation_version"] = EvaluationVersion.V1_SEVEN_GATE
+        return data
 
     def calculate_total(self) -> None:
         """Calculate base weighted score, gates, and post-debate total."""
@@ -84,8 +102,9 @@ class CandidateEvaluation(BaseModel):
                 max(0.0, min(100.0, self.base_score + self.debate_adjustment)), 2
             )
         self.all_gates_passed = all(
-            g.status == QualityGateStatus.PASSED for g in self.quality_gates
-        )
+            g.status in {QualityGateStatus.PASSED, QualityGateStatus.NOT_APPLICABLE}
+            for g in self.quality_gates
+        ) and any(g.status == QualityGateStatus.PASSED for g in self.quality_gates)
         self.is_qualified = (
             self.all_gates_passed
             and self.total_score > 0

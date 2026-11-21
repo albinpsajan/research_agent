@@ -117,6 +117,8 @@ def _render_scoring(result: PipelineResult, has_winner: bool) -> None:
     winner = result.winner
     if has_winner and winner and winner.winner:
         evaluation = winner.winner
+        solution = _find_solution(result, evaluation.candidate_id)
+
         st.markdown("### Score breakdown")
         st.dataframe(
             pd.DataFrame(score_rows(evaluation)),
@@ -130,15 +132,72 @@ def _render_scoring(result: PipelineResult, has_winner: bool) -> None:
             },
         )
         st.caption(
-            f"Base score {evaluation.base_score:.1f} · debate adjustment "
-            f"{evaluation.debate_adjustment:+.1f} · final {evaluation.total_score:.1f}"
+            f"Framework: `{evaluation.evaluation_version.value}` · "
+            f"Raw {evaluation.raw_score:.1f} · Base {evaluation.base_score:.1f} · "
+            f"Normalized {evaluation.normalized_score:.1f} · Debate adjustment {evaluation.debate_adjustment:+.1f} · "
+            f"Final {evaluation.total_score:.1f}/100"
         )
-        st.markdown("### Mandatory quality gates")
+
+        st.markdown("### Mandatory Quality Gates Qualification")
+        passed_cnt = sum(1 for g in evaluation.quality_gates if g.status.value == "passed")
+        failed_cnt = sum(1 for g in evaluation.quality_gates if g.status.value == "failed")
+        insuf_cnt = sum(1 for g in evaluation.quality_gates if g.status.value == "insufficient_evidence")
+        na_cnt = sum(1 for g in evaluation.quality_gates if g.status.value == "not_applicable")
+
+        q1, q2, q3, q4 = st.columns(4)
+        q1.metric("PASSED", f"{passed_cnt} / {len(evaluation.quality_gates)}")
+        q2.metric("FAILED", failed_cnt)
+        q3.metric("INSUFFICIENT EVIDENCE", insuf_cnt)
+        q4.metric("NOT APPLICABLE", na_cnt)
+
         st.dataframe(
             pd.DataFrame(gate_rows(evaluation)),
             use_container_width=True,
             hide_index=True,
         )
+
+        # Global-to-Local Adaptation Analysis Card
+        if solution and (solution.kerala_adaptation or solution.target_districts):
+            st.markdown("### Global-to-Local Adaptation Analysis (Kerala & India)")
+            adapt = solution.kerala_adaptation
+            tier_val = adapt.transferability_tier.value if adapt else "unspecified"
+            districts = ", ".join(solution.target_districts) if solution.target_districts else "All Kerala Agro-Ecological Zones"
+            st.markdown(
+                f"""
+                <div style="border: 1px solid #3b82f644; border-radius: 8px; padding: 14px; background: #0f172a; margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600; font-size: 1.05rem; color: #93c5fd;">
+                            Transferability Taxonomy: {tier_val.replace('_', ' ').upper()}
+                        </span>
+                        <span style="background: #1e3a8a; color: #bfdbfe; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem;">
+                            Districts: {districts}
+                        </span>
+                    </div>
+                    <div style="margin-top: 8px; color: #e2e8f0; font-size: 0.9rem;">
+                        <strong>Kerala Applicability:</strong> {adapt.kerala_applicability if adapt else 'Standard localization'}
+                    </div>
+                    <div style="margin-top: 6px; color: #e2e8f0; font-size: 0.9rem;">
+                        <strong>India Scale Potential:</strong> {adapt.india_scale_potential if adapt else 'National open data portals'}
+                    </div>
+                    <div style="margin-top: 6px; color: #38bdf8; font-size: 0.9rem;">
+                        <strong>Genuine Innovation Introduced:</strong> {adapt.genuine_innovation_introduced if adapt else solution.unique_differentiation}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            c_mod, c_con = st.columns(2)
+            with c_mod:
+                st.markdown("**Required Local Modifications**")
+                mods = adapt.required_modifications if adapt else []
+                for m in mods:
+                    st.markdown(f"- {m}")
+            with c_con:
+                st.markdown("**Local Ecological/Civic Constraints**")
+                cons = adapt.local_constraints if adapt else []
+                for c in cons:
+                    st.markdown(f"- {c}")
+
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("**Strengths**")
@@ -161,6 +220,7 @@ def _render_scoring(result: PipelineResult, has_winner: bool) -> None:
                             "Domain": item.domain,
                             "Score": item.total_score,
                             "Qualified": item.is_qualified,
+                            "Version": getattr(item, "evaluation_version", "v2_ten_gate"),
                         }
                         for item in winner.runner_ups
                     ]
@@ -178,6 +238,7 @@ def _render_scoring(result: PipelineResult, has_winner: bool) -> None:
                         "Domain": item.domain,
                         "Score": item.total_score,
                         "Qualified": item.is_qualified,
+                        "Version": getattr(item, "evaluation_version", "v2_ten_gate"),
                     }
                     for item in result.winner.runner_ups
                 ]
@@ -187,6 +248,21 @@ def _render_scoring(result: PipelineResult, has_winner: bool) -> None:
         )
     else:
         st.info("No winning score is available for this run.")
+
+    # Candidate Rejection Explanations (when no winner or rejected finalists exist)
+    if not has_winner and result.final_report and result.final_report.evaluations:
+        st.markdown("### Candidate Rejection & Quality Gate Audit")
+        st.caption("Detailed breakdown of why each candidate failed the mandatory quality threshold.")
+        for eval_item in result.final_report.evaluations:
+            with st.expander(f"❌ [{eval_item.candidate_id}] {eval_item.candidate_title} (Score: {eval_item.total_score:.1f}/100)"):
+                failed_gates = [g for g in eval_item.quality_gates if g.status.value in {"failed", "insufficient_evidence"}]
+                if failed_gates:
+                    st.error(f"Failed {len(failed_gates)} mandatory quality gate(s):")
+                    for fg in failed_gates:
+                        st.markdown(f"- **{fg.name}** (`{fg.status.value.upper()}`): {fg.justification}")
+                else:
+                    st.warning("Candidate passed gates but was rejected during adversarial debate or below qualifying score threshold.")
+                st.markdown(f"**Evaluator Assessment:** {eval_item.overall_assessment}")
 
 
 def _render_domains(result: PipelineResult) -> None:

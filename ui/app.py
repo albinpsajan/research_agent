@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
 from config.settings import get_settings  # noqa: E402
 from src.storage.manager import StorageManager  # noqa: E402
 from ui.components.common import APP_VERSION, get_llm, inject_css  # noqa: E402
-from ui.pages import history, intelligence, new_research, results, settings  # noqa: E402
+from ui.pages import history, intelligence, new_research, playbook, results, settings  # noqa: E402
 
 st.set_page_config(
     page_title="HackathonIQ",
@@ -27,6 +27,7 @@ inject_css()
 PAGES = {
     "New research": new_research.render,
     "Results": results.render,
+    "Playbook": playbook.render,
     "History": history.render,
     "Intelligence": intelligence.render,
     "Settings": settings.render,

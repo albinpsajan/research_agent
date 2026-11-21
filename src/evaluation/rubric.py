@@ -17,6 +17,7 @@ from src.models.candidate import CandidateSolution
 from src.models.domain import ProblemCandidate
 from src.models.evaluation import (
     CandidateEvaluation,
+    EvaluationVersion,
     QualityGate,
     QualityGateStatus,
     ScoreCriterion,
@@ -28,7 +29,17 @@ from src.utils.hackathon_time import available_hours, deadline_note
 
 logger = get_logger("evaluation.rubric")
 
-GATE_NAMES = (
+V1_GATE_NAMES = (
+    "Credible evidence of the problem",
+    "Existing-solution investigation",
+    "Honest originality classification",
+    "Practical implementation path",
+    "Realistic hackathon deadline",
+    "Risk and disadvantage assessment",
+    "Compliance with hackathon rules",
+)
+
+V2_GATE_NAMES = (
     "Hackathon theme and judging alignment",
     "Real-world problem validation",
     "Kerala and India relevance",
@@ -40,6 +51,8 @@ GATE_NAMES = (
     "Hackathon buildability and demonstration",
     "Risk, ethics and sustainability",
 )
+
+GATE_NAMES = V2_GATE_NAMES
 
 SYSTEM = """You are the independent evaluator for HackathonIQ.
 Score the candidate against the agreed rubric. You are NOT the architect and
@@ -109,64 +122,94 @@ def _match_criterion(name: str, weights: dict[str, int]) -> str | None:
     return None
 
 
-def _match_gate(name: str) -> str | None:
+def _match_gate(name: str, version: EvaluationVersion = EvaluationVersion.V2_TEN_GATE) -> str | None:
     normalized = _normalize(name)
+    if version == EvaluationVersion.V1_SEVEN_GATE:
+        keyword_map_v1 = {
+            "evidence": V1_GATE_NAMES[0],
+            "validation": V1_GATE_NAMES[0],
+            "credible": V1_GATE_NAMES[0],
+            "existing": V1_GATE_NAMES[1],
+            "solution investigation": V1_GATE_NAMES[1],
+            "originality": V1_GATE_NAMES[2],
+            "differentiation": V1_GATE_NAMES[2],
+            "honest": V1_GATE_NAMES[2],
+            "technical": V1_GATE_NAMES[3],
+            "feasibility": V1_GATE_NAMES[3],
+            "practical": V1_GATE_NAMES[3],
+            "deadline": V1_GATE_NAMES[4],
+            "buildability": V1_GATE_NAMES[4],
+            "realistic": V1_GATE_NAMES[4],
+            "risk": V1_GATE_NAMES[5],
+            "disadvantage": V1_GATE_NAMES[5],
+            "ethics": V1_GATE_NAMES[5],
+            "sustainability": V1_GATE_NAMES[5],
+            "compliance": V1_GATE_NAMES[6],
+            "rules": V1_GATE_NAMES[6],
+            "theme": V1_GATE_NAMES[6],
+            "judging": V1_GATE_NAMES[6],
+        }
+        for keyword, gate in keyword_map_v1.items():
+            if keyword in normalized:
+                return gate
+        return None
+
     keyword_map = {
         # Gate 1: Theme & judging alignment (also matches legacy compliance)
-        "theme": GATE_NAMES[0],
-        "judging": GATE_NAMES[0],
-        "rules": GATE_NAMES[0],
-        "compliance": GATE_NAMES[0],
-        "compliance with hackathon rules": GATE_NAMES[0],
+        "theme": V2_GATE_NAMES[0],
+        "judging": V2_GATE_NAMES[0],
+        "rules": V2_GATE_NAMES[0],
+        "compliance": V2_GATE_NAMES[0],
+        "compliance with hackathon rules": V2_GATE_NAMES[0],
         # Gate 2: Real-world problem validation (also matches legacy evidence)
-        "evidence": GATE_NAMES[1],
-        "validation": GATE_NAMES[1],
-        "credible evidence of the problem": GATE_NAMES[1],
-        "problem validation": GATE_NAMES[1],
+        "evidence": V2_GATE_NAMES[1],
+        "validation": V2_GATE_NAMES[1],
+        "credible evidence of the problem": V2_GATE_NAMES[1],
+        "problem validation": V2_GATE_NAMES[1],
         # Gate 3: Kerala and India relevance
-        "kerala": GATE_NAMES[2],
-        "india": GATE_NAMES[2],
-        "relevance": GATE_NAMES[2],
-        "kerala and india relevance": GATE_NAMES[2],
+        "kerala": V2_GATE_NAMES[2],
+        "india": V2_GATE_NAMES[2],
+        "relevance": V2_GATE_NAMES[2],
+        "kerala and india relevance": V2_GATE_NAMES[2],
         # Gate 4: Existing-solution investigation
-        "existing": GATE_NAMES[3],
-        "solution investigation": GATE_NAMES[3],
-        "existing-solution investigation": GATE_NAMES[3],
+        "existing": V2_GATE_NAMES[3],
+        "solution investigation": V2_GATE_NAMES[3],
+        "existing-solution investigation": V2_GATE_NAMES[3],
         # Gate 5: Genuine innovation and differentiation (also matches legacy originality)
-        "originality": GATE_NAMES[4],
-        "differentiation": GATE_NAMES[4],
-        "honest originality classification": GATE_NAMES[4],
-        "genuine innovation and differentiation": GATE_NAMES[4],
+        "originality": V2_GATE_NAMES[4],
+        "differentiation": V2_GATE_NAMES[4],
+        "honest originality classification": V2_GATE_NAMES[4],
+        "genuine innovation and differentiation": V2_GATE_NAMES[4],
         # Gate 6: Global-to-local adaptability
-        "adaptability": GATE_NAMES[5],
-        "global": GATE_NAMES[5],
-        "adaptation": GATE_NAMES[5],
-        "global-to-local adaptability": GATE_NAMES[5],
+        "adaptability": V2_GATE_NAMES[5],
+        "global": V2_GATE_NAMES[5],
+        "adaptation": V2_GATE_NAMES[5],
+        "global-to-local adaptability": V2_GATE_NAMES[5],
         # Gate 7: Technical feasibility and data availability (also matches legacy practical)
-        "technical": GATE_NAMES[6],
-        "feasibility": GATE_NAMES[6],
-        "practical implementation path": GATE_NAMES[6],
-        "technical feasibility and data availability": GATE_NAMES[6],
-        "data availability": GATE_NAMES[6],
+        "technical": V2_GATE_NAMES[6],
+        "feasibility": V2_GATE_NAMES[6],
+        "practical implementation path": V2_GATE_NAMES[6],
+        "technical feasibility and data availability": V2_GATE_NAMES[6],
+        "data availability": V2_GATE_NAMES[6],
         # Gate 8: Economic and practical viability
-        "economic": GATE_NAMES[7],
-        "viability": GATE_NAMES[7],
-        "cost": GATE_NAMES[7],
-        "economic and practical viability": GATE_NAMES[7],
+        "economic": V2_GATE_NAMES[7],
+        "viability": V2_GATE_NAMES[7],
+        "cost": V2_GATE_NAMES[7],
+        "economic and practical viability": V2_GATE_NAMES[7],
         # Gate 9: Hackathon buildability and demonstration (also matches legacy deadline)
-        "deadline": GATE_NAMES[8],
-        "buildability": GATE_NAMES[8],
-        "demonstration": GATE_NAMES[8],
-        "demo": GATE_NAMES[8],
-        "realistic hackathon deadline": GATE_NAMES[8],
-        "hackathon buildability and demonstration": GATE_NAMES[8],
+        "deadline": V2_GATE_NAMES[8],
+        "buildability": V2_GATE_NAMES[8],
+        "demonstration": V2_GATE_NAMES[8],
+        "demo": V2_GATE_NAMES[8],
+        "realistic hackathon deadline": V2_GATE_NAMES[8],
+        "hackathon buildability and demonstration": V2_GATE_NAMES[8],
         # Gate 10: Risk, ethics and sustainability (also matches legacy risk assessment)
-        "risk": GATE_NAMES[9],
-        "disadvantage": GATE_NAMES[9],
-        "ethics": GATE_NAMES[9],
-        "sustainability": GATE_NAMES[9],
-        "risk and disadvantage assessment": GATE_NAMES[9],
-        "risk ethics and sustainability": GATE_NAMES[9],
+        "risk": V2_GATE_NAMES[9],
+        "disadvantage": V2_GATE_NAMES[9],
+        "ethics": V2_GATE_NAMES[9],
+        "sustainability": V2_GATE_NAMES[9],
+        "risk and disadvantage assessment": V2_GATE_NAMES[9],
+        "risk ethics and sustainability": V2_GATE_NAMES[9],
     }
     for keyword, gate in keyword_map.items():
         if keyword in normalized:
@@ -175,15 +218,17 @@ def _match_gate(name: str) -> str | None:
 
 
 class EvaluationService:
-    """Scores candidates and enforces the seven mandatory quality gates."""
+    """Scores candidates and enforces mandatory quality gates (supporting V1 7-gate and V2 10-gate)."""
 
     def __init__(
         self,
         llm: LLMClientProtocol,
         settings: EvaluationSettings | None = None,
+        version: EvaluationVersion = EvaluationVersion.V2_TEN_GATE,
     ) -> None:
         self.llm = llm
         self.settings = settings or get_settings().evaluation
+        self.version = version
         if self.settings.total_weight != 100:
             raise ValueError(
                 f"Evaluation rubric must total 100, got {self.settings.total_weight}"
@@ -254,7 +299,7 @@ class EvaluationService:
         )
         llm_gates = {}
         for item in result.gates:
-            matched = _match_gate(item.name)
+            matched = _match_gate(item.name, self.version)
             if matched and matched not in llm_gates:
                 llm_gates[matched] = item
         for gate in gates:
@@ -279,10 +324,13 @@ class EvaluationService:
             scores=scores,
             quality_gates=gates,
             is_general_theme_mode=is_general_theme,
+            evaluation_version=self.version,
             overall_assessment=result.overall_assessment,
             strengths=result.strengths[:8],
             weaknesses=result.weaknesses[:8],
         )
+        evaluation.calculate_total()
+        return evaluation
         evaluation.calculate_total()
         return evaluation
 
@@ -332,6 +380,8 @@ class EvaluationService:
             f"Kerala Applicability: {candidate.kerala_adaptation.kerala_applicability if candidate.kerala_adaptation else 'unspecified'}\n"
             f"India Scale Potential: {candidate.kerala_adaptation.india_scale_potential if candidate.kerala_adaptation else 'unspecified'}"
         )
+        gate_names = V1_GATE_NAMES if self.version == EvaluationVersion.V1_SEVEN_GATE else V2_GATE_NAMES
+        gate_count_str = "seven" if self.version == EvaluationVersion.V1_SEVEN_GATE else "ten"
         return f"""Hackathon theme: {hackathon.theme}
 Hackathon name: {hackathon.name or "not supplied"}
 Deadline: {hackathon.deadline.isoformat() if hackathon.deadline else "not supplied"}
@@ -382,9 +432,9 @@ RUBRIC (score each 0-10 with a specific justification):
 {weights}
 
 MANDATORY GATES (evaluate honestly):
-{chr(10).join("- " + name for name in GATE_NAMES)}
+{chr(10).join("- " + name for name in gate_names)}
 
-Return all eight rubric criteria exactly once, all ten gates, an overall
+Return all eight rubric criteria exactly once, all {gate_count_str} gates, an overall
 assessment, strengths and weaknesses. Do not inflate scores."""
 
     # ------------------------------------------------------------------
@@ -392,6 +442,202 @@ assessment, strengths and weaknesses. Do not inflate scores."""
     # ------------------------------------------------------------------
 
     def _deterministic_gates(
+        self,
+        candidate: CandidateSolution,
+        problem: ProblemCandidate | None,
+        gap: InnovationGap | None,
+        hackathon: HackathonInput,
+        intelligence: HackathonIntelligence,
+        hours: float,
+    ) -> list[QualityGate]:
+        if self.version == EvaluationVersion.V1_SEVEN_GATE:
+            return self._deterministic_gates_v1(
+                candidate, problem, gap, hackathon, intelligence, hours
+            )
+        return self._deterministic_gates_v2(
+            candidate, problem, gap, hackathon, intelligence, hours
+        )
+
+    def _deterministic_gates_v1(
+        self,
+        candidate: CandidateSolution,
+        problem: ProblemCandidate | None,
+        gap: InnovationGap | None,
+        hackathon: HackathonInput,
+        intelligence: HackathonIntelligence,
+        hours: float,
+    ) -> list[QualityGate]:
+        gates: list[QualityGate] = []
+
+        # Gate 0: Credible evidence of the problem
+        evidence = problem.evidence if problem else []
+        urls = {e.source_url for e in evidence if e.source_url}
+        max_credibility = max((e.credibility for e in evidence), default=0.0)
+        credible = len(urls) >= 2 and max_credibility >= 0.6
+        gate0_fail = "" if credible else EvidenceAggregator.classify_gate_failure(V1_GATE_NAMES[0], candidate, problem, gap)
+        gates.append(
+            QualityGate(
+                name=V1_GATE_NAMES[0],
+                description="At least two independent, credible sources support the problem.",
+                status=QualityGateStatus.PASSED if credible else QualityGateStatus.FAILED,
+                justification=(
+                    f"{len(urls)} distinct evidence URL(s); highest credibility {max_credibility:.2f}."
+                    + (f" [{gate0_fail}]" if gate0_fail else "")
+                ),
+                evidence=sorted(urls)[:8],
+            )
+        )
+
+        # Gate 1: Existing-solution investigation
+        existing_count = (
+            len(gap.existing_solutions) + len(gap.github_projects) if gap else 0
+        )
+        has_summary = bool(gap and gap.evidence_summary and gap.evidence_summary.strip())
+        investigated = bool(
+            gap
+            and gap.classification != OpportunityClassification.INSUFFICIENT_EVIDENCE
+            and existing_count > 0
+            and has_summary
+        )
+        gate1_fail = "" if investigated else EvidenceAggregator.classify_gate_failure(V1_GATE_NAMES[1], candidate, problem, gap)
+        gates.append(
+            QualityGate(
+                name=V1_GATE_NAMES[1],
+                description="Real existing solutions or repositories were investigated.",
+                status=QualityGateStatus.PASSED if investigated else QualityGateStatus.FAILED,
+                justification=(
+                    f"{existing_count} existing solution/repository record(s); "
+                    f"classification={gap.classification.value if gap else 'none'}."
+                    + (f" [{gate1_fail}]" if gate1_fail else "")
+                ),
+                evidence=([s.url for s in gap.existing_solutions if s.url][:8] if gap else []),
+            )
+        )
+
+        # Gate 2: Honest originality classification
+        originality_ok = bool(
+            gap
+            and gap.classification
+            in {
+                OpportunityClassification.DIFFERENTIATED,
+                OpportunityClassification.UNDERSERVED,
+                OpportunityClassification.LIMITED_SOLUTION,
+            }
+            and len(candidate.unique_differentiation.strip()) >= 30
+        )
+        gate2_fail = "" if originality_ok else EvidenceAggregator.classify_gate_failure(V1_GATE_NAMES[2], candidate, problem, gap)
+        gates.append(
+            QualityGate(
+                name=V1_GATE_NAMES[2],
+                description="Originality is classified honestly and differentiation is stated.",
+                status=QualityGateStatus.PASSED if originality_ok else QualityGateStatus.FAILED,
+                justification=(
+                    f"Classification: {gap.classification.value if gap else 'none'}; "
+                    f"differentiation length: {len(candidate.unique_differentiation)} chars."
+                    + (f" [{gate2_fail}]" if gate2_fail else "")
+                ),
+                evidence=[gap.differentiation_potential] if gap and gap.differentiation_potential else [],
+            )
+        )
+
+        # Gate 3: Practical implementation path
+        unavailable = [
+            req.description
+            for req in candidate.data_requirements + candidate.api_requirements
+            if req.availability == "unavailable"
+        ]
+        practical = bool(
+            candidate.proposed_solution.strip()
+            and candidate.technical_architecture.strip()
+            and candidate.estimated_hours
+            and candidate.estimated_hours > 0
+            and not unavailable
+        )
+        gate3_fail = "" if practical else EvidenceAggregator.classify_gate_failure(V1_GATE_NAMES[3], candidate, problem, gap)
+        gates.append(
+            QualityGate(
+                name=V1_GATE_NAMES[3],
+                description="A concrete architecture and available data/API path exist.",
+                status=QualityGateStatus.PASSED if practical else QualityGateStatus.FAILED,
+                justification=(
+                    ("Solution and architecture are specified."
+                     if practical
+                     else f"Missing architecture/solution or unavailable dependencies: {unavailable[:4]}")
+                    + (f" [{gate3_fail}]" if gate3_fail else "")
+                ),
+            )
+        )
+
+        # Gate 4: Realistic hackathon deadline
+        deadline_ok = (
+            candidate.estimated_hours is not None
+            and candidate.estimated_hours <= hours * 1.15
+            and hours > 0
+        )
+        gates.append(
+            QualityGate(
+                name=V1_GATE_NAMES[4],
+                description="The build fits the available hackathon time.",
+                status=QualityGateStatus.PASSED if deadline_ok else QualityGateStatus.FAILED,
+                justification=(
+                    f"Estimated {candidate.estimated_hours or 0:.0f}h vs {hours:.1f}h available "
+                    f"({deadline_note(hackathon)})."
+                ),
+            )
+        )
+
+        # Gate 5: Risk and disadvantage assessment
+        mitigated_risks = [r for r in candidate.risks if r.mitigation]
+        risk_ok = (
+            len(candidate.risks) >= 2
+            and len(candidate.disadvantages) >= 1
+            and len(candidate.mitigation_strategies) >= 1
+            and len(mitigated_risks) >= 1
+        )
+        gate5_fail = "" if risk_ok else EvidenceAggregator.classify_gate_failure(V1_GATE_NAMES[5], candidate, problem, gap)
+        gates.append(
+            QualityGate(
+                name=V1_GATE_NAMES[5],
+                description="Risks, disadvantages, and mitigations are documented.",
+                status=QualityGateStatus.PASSED if risk_ok else QualityGateStatus.FAILED,
+                justification=(
+                    f"{len(candidate.risks)} risk(s), {len(candidate.disadvantages)} "
+                    f"disadvantage(s), {len(candidate.mitigation_strategies)} "
+                    f"mitigation(s), {len(mitigated_risks)} mitigated risk(s)."
+                    + (f" [{gate5_fail}]" if gate5_fail else "")
+                ),
+            )
+        )
+
+        # Gate 6: Compliance with hackathon rules
+        restrictions = intelligence.technical_restrictions + (
+            [hackathon.constraints] if hackathon.constraints else []
+        )
+        is_general = (
+            not bool(hackathon.name and hackathon.name.strip())
+            or getattr(intelligence, "is_general_theme_mode", False)
+            or (hackathon.name or "").lower().strip() in {"none", "unknown", "general theme", "general"}
+        )
+        gates.append(
+            QualityGate(
+                name=V1_GATE_NAMES[6],
+                description="The idea adheres to all known hackathon restrictions.",
+                status=QualityGateStatus.PASSED,
+                justification=(
+                    "General Theme Mode active: no organizer-specific rules enforced; theme guidance applied."
+                    if is_general
+                    else (
+                        f"Verified against {len(restrictions)} hackathon rule(s)."
+                        if restrictions
+                        else "No restrictive hackathon rules declared."
+                    )
+                ),
+            )
+        )
+
+        return gates
+
+    def _deterministic_gates_v2(
         self,
         candidate: CandidateSolution,
         problem: ProblemCandidate | None,
@@ -435,12 +681,18 @@ assessment, strengths and weaknesses. Do not inflate scores."""
         urls = {e.source_url for e in evidence if e.source_url}
         max_credibility = max((e.credibility for e in evidence), default=0.0)
         credible = len(urls) >= 2 and max_credibility >= 0.6
-        gate2_fail = "" if credible else EvidenceAggregator.classify_gate_failure(GATE_NAMES[1], candidate, problem, gap)
+        gate2_fail = "" if credible else EvidenceAggregator.classify_gate_failure(V2_GATE_NAMES[1], candidate, problem, gap)
+        if credible:
+            g2_status = QualityGateStatus.PASSED
+        elif len(urls) == 0:
+            g2_status = QualityGateStatus.INSUFFICIENT_EVIDENCE
+        else:
+            g2_status = QualityGateStatus.FAILED
         gates.append(
             QualityGate(
-                name=GATE_NAMES[1],
+                name=V2_GATE_NAMES[1],
                 description="At least two independent, credible sources support the problem existence.",
-                status=QualityGateStatus.PASSED if credible else QualityGateStatus.FAILED,
+                status=g2_status,
                 justification=(
                     f"{len(urls)} distinct evidence URL(s); highest credibility {max_credibility:.2f}."
                     + (f" [{gate2_fail}]" if gate2_fail else "")
@@ -459,11 +711,11 @@ assessment, strengths and weaknesses. Do not inflate scores."""
             or "kerala" in (problem.description.lower() if problem else "")
             or candidate.target_geography in {"kerala", "india"}
         )
-        gate3_fail = "" if has_kerala else EvidenceAggregator.classify_gate_failure(GATE_NAMES[2], candidate, problem, gap)
+        gate3_fail = "" if has_kerala else EvidenceAggregator.classify_gate_failure(V2_GATE_NAMES[2], candidate, problem, gap)
         districts_str = ", ".join(candidate.target_districts[:4]) if candidate.target_districts else "State-wide Kerala"
         gates.append(
             QualityGate(
-                name=GATE_NAMES[2],
+                name=V2_GATE_NAMES[2],
                 description="Problem directly addresses Kerala ecological/civic realities with Indian scalability.",
                 status=QualityGateStatus.PASSED if has_kerala else QualityGateStatus.FAILED,
                 justification=(
@@ -485,12 +737,18 @@ assessment, strengths and weaknesses. Do not inflate scores."""
             and existing_count > 0
             and has_summary
         )
-        gate4_fail = "" if investigated else EvidenceAggregator.classify_gate_failure(GATE_NAMES[3], candidate, problem, gap)
+        gate4_fail = "" if investigated else EvidenceAggregator.classify_gate_failure(V2_GATE_NAMES[3], candidate, problem, gap)
+        if investigated:
+            g4_status = QualityGateStatus.PASSED
+        elif gap is None or (existing_count == 0 and not has_summary):
+            g4_status = QualityGateStatus.INSUFFICIENT_EVIDENCE
+        else:
+            g4_status = QualityGateStatus.FAILED
         gates.append(
             QualityGate(
-                name=GATE_NAMES[3],
+                name=V2_GATE_NAMES[3],
                 description="Real existing solutions or repositories were investigated.",
-                status=QualityGateStatus.PASSED if investigated else QualityGateStatus.FAILED,
+                status=g4_status,
                 justification=(
                     f"{existing_count} existing solution/repository record(s); "
                     f"classification={gap.classification.value if gap else 'none'}."

@@ -171,11 +171,33 @@ class ContinuousIntelligenceService:
 
     def _store(self, result: SearchResult, category: str | None = None) -> int | None:
         topics = query_terms(f"{result.title} {result.snippet}", limit=8)
+
+        text = f"{result.title} {result.snippet}".lower()
+        if "kerala" in text or any(d in text for d in ["wayanad", "kuttanad", "idukki", "palakkad", "alappuzha"]):
+            geography = "kerala"
+        elif "india" in text or "indian" in text:
+            geography = "india"
+        else:
+            geography = "global"
+
+        if any(w in text for w in ["agriculture", "crop", "farm", "agro", "monsoon"]):
+            domain = "agriculture"
+        elif any(w in text for w in ["health", "medical", "disease", "telemedicine", "dengue"]):
+            domain = "healthcare"
+        elif any(w in text for w in ["education", "school", "learning", "vernacular"]):
+            domain = "education"
+        elif any(w in text for w in ["disaster", "flood", "landslide", "hazard"]):
+            domain = "disaster_management"
+        else:
+            domain = "general"
+
         metadata = dict(result.metadata)
         metadata.update(
             {
                 "authors": result.authors,
                 "reliability": result.reliability,
+                "domain": domain,
+                "geography": geography,
                 "published_at": (
                     result.published_at.isoformat() if result.published_at else None
                 ),
@@ -294,22 +316,28 @@ class ContinuousIntelligenceService:
             term for term in (extra_terms or []) if term
         ]
         rows = self.repository.search_intelligence_items(terms, limit=limit)
-        items = [
-            IntelligenceItem(
-                id=row.get("id"),
-                source_type=row.get("source_type", ""),
-                category=row.get("category", ""),
-                title=row.get("title", ""),
-                description=row.get("description"),
-                url=row.get("url"),
-                topics=row.get("topics_json") or [],
-                metadata=row.get("metadata_json") or {},
-                retrieved_at=_parse_datetime(row.get("retrieved_at")),
-                freshness_date=_parse_datetime(row.get("freshness_date")),
-                is_stale=bool(row.get("is_stale")),
+        items = []
+        for row in rows:
+            meta = row.get("metadata_json") or {}
+            items.append(
+                IntelligenceItem(
+                    id=row.get("id"),
+                    source_type=row.get("source_type", ""),
+                    category=row.get("category", ""),
+                    title=row.get("title", ""),
+                    description=row.get("description"),
+                    url=row.get("url"),
+                    domain=meta.get("domain", "general"),
+                    geography=meta.get("geography", "global"),
+                    reliability=float(meta.get("reliability", 0.8)),
+                    publication_date=_parse_datetime(meta.get("published_at")) if meta.get("published_at") else None,
+                    topics=row.get("topics_json") or [],
+                    metadata=meta,
+                    retrieved_at=_parse_datetime(row.get("retrieved_at")),
+                    freshness_date=_parse_datetime(row.get("freshness_date")),
+                    is_stale=bool(row.get("is_stale")),
+                )
             )
-            for row in rows
-        ]
         dates = [item.freshness_date or item.retrieved_at for item in items]
         dates = [date for date in dates if date]
         newest = max(dates) if dates else None

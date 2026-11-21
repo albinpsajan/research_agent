@@ -11,6 +11,7 @@ from src.models.candidate import (
     TechnicalRequirement,
 )
 from src.models.domain import ProblemCandidate, ProblemEvidence
+from src.models.evaluation import QualityGateStatus
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import (
     ExistingSolution,
@@ -145,7 +146,7 @@ def test_missing_evidence_fails_gate_despite_high_score() -> None:
         HackathonIntelligence(hackathon_input=_hackathon()),
     )
     evidence_gate = next(g for g in evaluation.quality_gates if g.name == GATE_NAMES[1])
-    assert evidence_gate.status.value == "failed"
+    assert evidence_gate.status in {QualityGateStatus.FAILED, QualityGateStatus.INSUFFICIENT_EVIDENCE}
     assert not evaluation.is_qualified
     assert evaluation.total_score == 100.0  # high score must not hide the failure
 

@@ -48,6 +48,28 @@ def render() -> None:
                 "Constraints (optional)", placeholder="e.g. 36 hours, teams of 4"
             )
 
+        g1, g2 = st.columns(2)
+        with g1:
+            geo_priority = st.selectbox(
+                "Geographical research priority",
+                [
+                    "Kerala First (with Indian scalability and Global taxonomy)",
+                    "India National (with Global benchmarking)",
+                    "Global Broad (with Indian transferability)",
+                ],
+                index=0,
+            )
+        with g2:
+            kerala_districts = st.multiselect(
+                "Target Kerala districts (optional)",
+                [
+                    "Alappuzha", "Ernakulam", "Idukki", "Kannur", "Kasaragod",
+                    "Kollam", "Kottayam", "Kozhikode", "Malappuram", "Palakkad",
+                    "Pathanamthitta", "Thiruvananthapuram", "Thrissur", "Wayanad",
+                ],
+                default=["Wayanad", "Alappuzha", "Palakkad", "Idukki"],
+            )
+
         deadline_known = st.checkbox("I know the submission deadline", value=False)
         deadline: datetime | None = None
         if deadline_known:
@@ -131,13 +153,23 @@ def render() -> None:
         st.error("No Ollama model is installed. Open Settings → Model to download one.")
         return
 
+    full_constraints = []
+    if constraints.strip():
+        full_constraints.append(constraints.strip())
+    if geo_priority:
+        full_constraints.append(f"Geographical Priority: {geo_priority}")
+    if kerala_districts:
+        full_constraints.append(f"Target Kerala Districts: {', '.join(kerala_districts)}")
+
+    combined_constraints = "; ".join(full_constraints) if full_constraints else None
+
     hackathon = HackathonInput(
         theme=theme.strip(),
         name=name.strip() or None,
         website_url=website.strip() or None,
         rules_url=rules.strip() or None,
         deadline=deadline,
-        constraints=constraints.strip() or None,
+        constraints=combined_constraints,
     )
     options = PipelineOptions(
         max_domains=max_domains,

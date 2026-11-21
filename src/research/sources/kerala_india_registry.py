@@ -105,6 +105,90 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         data_formats=["PDF"],
         description="State policy blueprint defining climate vulnerabilities, greenhouse gas inventories, and priority adaptation sectors across Kerala.",
     ),
+    OfficialSource(
+        id="KL-006",
+        name="Kerala Directorate of Health Services (DHS)",
+        authority="Health & Family Welfare Department, Government of Kerala",
+        geography="kerala",
+        base_url="https://dhs.kerala.gov.in",
+        access_type="catalog_search",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["health", "telemedicine", "disease_surveillance", "dengue", "epidemiology", "public_health"],
+        data_formats=["PDF", "HTML", "JSON"],
+        description="Official state public health monitoring agency delivering communicable disease surveillance bulletins (dengue, leptospirosis) and rural telemedicine infrastructure records.",
+    ),
+    OfficialSource(
+        id="KL-007",
+        name="Department of Agriculture Development and Farmers' Welfare Kerala",
+        authority="Agriculture Department, Government of Kerala",
+        geography="kerala",
+        base_url="https://keralaagriculture.gov.in",
+        access_type="web_portal",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["agriculture", "smallholder_support", "homestead_farming", "crop_insurance", "organic_farming"],
+        data_formats=["HTML", "PDF", "CSV"],
+        description="State agrarian mission records, Krishi Bhavan network contacts, smallholder subsidy allocations, and localized crop loss assistance portals.",
+    ),
+    OfficialSource(
+        id="KL-008",
+        name="Kerala GHG Platform & Climate Energy Portal",
+        authority="Energy Management Centre (EMC) & Environment Dept, Government of Kerala",
+        geography="kerala",
+        base_url="https://kerala.gov.in/ghg",
+        access_type="bulk_download",
+        status=SourceCoverageStatus.CONFIGURED,
+        topics=["emissions", "greenhouse_gas", "renewable_energy", "energy_efficiency", "carbon_accounting"],
+        data_formats=["XLSX", "PDF"],
+        description="Sub-national greenhouse gas emission inventories across agriculture, energy, and land use sectors in Kerala.",
+    ),
+    OfficialSource(
+        id="KL-009",
+        name="Wayanad District Administration Official Portal",
+        authority="District Administration Wayanad, Government of Kerala",
+        geography="kerala",
+        base_url="https://wayanad.nic.in",
+        access_type="web_portal",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["wayanad", "landslides", "tribal_welfare", "coffee_plantation", "agroforestry"],
+        data_formats=["HTML", "PDF"],
+        description="Aspirational district administrative portal covering hilly terrain disaster zones, tribal agrarian communities, and coffee/spice plantation data.",
+    ),
+    OfficialSource(
+        id="KL-010",
+        name="Alappuzha & Kuttanad Wetland Administration Portal",
+        authority="District Administration Alappuzha & Kuttanad Development Project",
+        geography="kerala",
+        base_url="https://alappuzha.nic.in",
+        access_type="web_portal",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["alappuzha", "kuttanad", "below_sea_level_farming", "flooding", "paddy_polders", "salinity"],
+        data_formats=["HTML", "PDF"],
+        description="Official administration and wetland agricultural monitoring portal for Kuttanad's below-sea-level UNESCO Globally Important Agricultural Heritage System (GIAHS).",
+    ),
+    OfficialSource(
+        id="KL-011",
+        name="Palakkad District Agrarian & Water Portal",
+        authority="District Administration Palakkad, Government of Kerala",
+        geography="kerala",
+        base_url="https://palakkad.nic.in",
+        access_type="web_portal",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["palakkad", "drought", "rain_shadow", "groundwater", "rice_bowl", "irrigation"],
+        data_formats=["HTML", "PDF"],
+        description="Administrative portal covering Kerala's primary rice granary, Palakkad gap rain shadow zones, drought indicators, and canal irrigation networks.",
+    ),
+    OfficialSource(
+        id="KL-012",
+        name="Idukki District High-Range Portal",
+        authority="District Administration Idukki, Government of Kerala",
+        geography="kerala",
+        base_url="https://idukki.nic.in",
+        access_type="web_portal",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["idukki", "landslides", "high_ranges", "tea_cardamom", "dam_levels", "forests"],
+        data_formats=["HTML", "PDF"],
+        description="Official high-range district portal tracking mountain slope stability, reservoir capacities (Idukki Arch Dam), and spice smallholder statistics.",
+    ),
 
     # -------------------------------------------------------------
     # National (India-Wide) Official Sources
@@ -169,6 +253,42 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         data_formats=["CSV", "PDF"],
         description="Granular socio-economic and rural development monitoring framework across 112 aspirational districts including Wayanad (Kerala).",
     ),
+    OfficialSource(
+        id="IN-006",
+        name="Ministry of Statistics & Programme Implementation (MoSPI)",
+        authority="Ministry of Statistics and Programme Implementation, Government of India",
+        geography="india",
+        base_url="https://mospi.gov.in",
+        access_type="bulk_download",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["national_accounts", "economic_census", "consumer_price_index", "rural_demographics", "civic_indicators"],
+        data_formats=["CSV", "XLSX", "PDF"],
+        description="Central statistical agency publishing National Sample Surveys (NSSO), Periodic Labour Force Surveys, and rural socio-economic datasets.",
+    ),
+    OfficialSource(
+        id="IN-007",
+        name="Indian Council of Medical Research (ICMR)",
+        authority="Department of Health Research, Ministry of Health and Family Welfare, Govt of India",
+        geography="india",
+        base_url="https://icmr.gov.in",
+        access_type="catalog_search",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["health", "medical", "epidemiology", "dengue", "disease_surveillance", "telemedicine", "clinical"],
+        data_formats=["PDF", "HTML", "JSON"],
+        description="Apex biomedical research organization tracking communicable diseases, vector control, infectious outbreak models, and rural health clinics.",
+    ),
+    OfficialSource(
+        id="IN-008",
+        name="Bhoonidhi - NRSC Earth Observation Data Hub",
+        authority="National Remote Sensing Centre (NRSC) / ISRO",
+        geography="india",
+        base_url="https://bhoonidhi.nrsc.gov.in",
+        access_type="open_api",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["satellite_imagery", "remote_sensing", "multispectral", "land_surface", "open_data"],
+        data_formats=["GeoTIFF", "HDF5", "NetCDF"],
+        description="India's open satellite data dissemination gateway providing Sentinel, Landsat, and Indian remote sensing satellite passes.",
+    ),
 
     # -------------------------------------------------------------
     # Global Official Sources
@@ -221,6 +341,66 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         data_formats=["HDF", "GeoTIFF", "NetCDF"],
         description="Global Earth observation datasets including SRTM 30m digital elevation, GPM precipitation, and MODIS vegetation health indices.",
     ),
+    OfficialSource(
+        id="GL-005",
+        name="WHO Global Health Observatory",
+        authority="World Health Organization (WHO), United Nations",
+        geography="global",
+        base_url="https://www.who.int/data/gho",
+        access_type="open_api",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["health", "epidemiology", "disease_outbreaks", "mortality", "public_health_indicators", "telemedicine"],
+        data_formats=["JSON", "CSV", "XML"],
+        description="Global health statistics, infectious disease outbreak trackers, universal health coverage metrics, and rural healthcare accessibility standards.",
+    ),
+    OfficialSource(
+        id="GL-006",
+        name="UNESCO Open Data Portal",
+        authority="United Nations Educational, Scientific and Cultural Organization (UNESCO)",
+        geography="global",
+        base_url="https://opendata.unesco.org",
+        access_type="open_api",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["education", "literacy", "vernacular_learning", "science_policy", "cultural_heritage"],
+        data_formats=["JSON", "CSV"],
+        description="Global datasets on literacy, mother-tongue education frameworks, digital learning in vernacular languages, and open science initiatives.",
+    ),
+    OfficialSource(
+        id="GL-007",
+        name="UNICEF Data Warehouse",
+        authority="United Nations Children's Fund (UNICEF)",
+        geography="global",
+        base_url="https://data.unicef.org",
+        access_type="open_api",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["education", "child_welfare", "maternal_health", "nutrition", "rural_communities"],
+        data_formats=["JSON", "CSV"],
+        description="Cross-national database on child nutrition, early education, village community resilience, and maternal health metrics.",
+    ),
+    OfficialSource(
+        id="GL-008",
+        name="WMO World Weather Watch & Climatology",
+        authority="World Meteorological Organization (WMO)",
+        geography="global",
+        base_url="https://wmo.int",
+        access_type="catalog_search",
+        status=SourceCoverageStatus.CONFIGURED,
+        topics=["weather_extremes", "cyclone_tracking", "monsoon_climatology", "hydrometeorology"],
+        data_formats=["GRIB2", "NetCDF", "PDF"],
+        description="Global coordinated atmospheric observation system tracking tropical cyclone tracks, extreme precipitation anomalies, and regional drought trends.",
+    ),
+    OfficialSource(
+        id="GL-009",
+        name="UNEP Environment Data Explorer",
+        authority="United Nations Environment Programme (UNEP)",
+        geography="global",
+        base_url="https://www.unep.org/data",
+        access_type="open_api",
+        status=SourceCoverageStatus.INTEGRATED,
+        topics=["environmental_degradation", "biodiversity", "freshwater", "land_degradation", "climate_adaptation"],
+        data_formats=["JSON", "CSV", "GeoTIFF"],
+        description="Authoritative international portal providing global and regional environmental statistics, freshwater ecosystem indicators, and biodiversity metrics.",
+    ),
 ]
 
 
@@ -238,6 +418,16 @@ class KeralaIndiaSourceRegistry:
     ) -> list[OfficialSource]:
         """Recommend official data sources matching domain keywords and geographical scope."""
         keywords = set(re.findall(r"[a-z0-9]{3,}", domain_or_theme.lower()))
+        health_keywords = {"health", "medical", "telemedicine", "dengue", "disease", "epidemiology", "clinical", "hospital", "patient", "outbreak"}
+        agri_keywords = {"agriculture", "crop", "farming", "farmer", "monsoon", "agro", "paddy", "soil", "harvest", "land", "fertilizer"}
+        edu_gov_keywords = {"education", "vernacular", "school", "learning", "governance", "civic", "grievance", "public", "literacy"}
+        disaster_keywords = {"disaster", "landslide", "flood", "hazard", "cyclone", "emergency", "inundation"}
+
+        is_health = bool(keywords & health_keywords)
+        is_agri = bool(keywords & agri_keywords)
+        is_edu_gov = bool(keywords & edu_gov_keywords)
+        is_disaster = bool(keywords & disaster_keywords)
+
         scored: list[tuple[float, OfficialSource]] = []
 
         for src in self.catalog:
@@ -252,13 +442,43 @@ class KeralaIndiaSourceRegistry:
 
             source_tokens = set(re.findall(r"[a-z0-9]{3,}", f"{src.name} {src.description} {' '.join(src.topics)}".lower()))
             overlap = keywords & source_tokens
-            score = (len(overlap) * 2.0 + (1.5 if src.status == SourceCoverageStatus.INTEGRATED else 1.0)) * geo_weight
+            base_score = len(overlap) * 2.0 + (1.5 if src.status == SourceCoverageStatus.INTEGRATED else 1.0)
+
+            boost = 0.0
+            src_topics_str = " ".join(src.topics).lower() + " " + src.name.lower()
+            if is_health and any(k in src_topics_str for k in {"health", "disease", "medical", "telemedicine", "epidemiology"}):
+                boost += 6.0
+            if is_agri and any(k in src_topics_str for k in {"agriculture", "crop", "agro", "farming", "weather"}):
+                boost += 5.0
+            if is_edu_gov and any(k in src_topics_str for k in {"governance", "civic", "education", "literacy", "demographics"}):
+                boost += 5.0
+            if is_disaster and any(k in src_topics_str for k in {"disaster", "landslide", "flood", "hazard"}):
+                boost += 6.0
+
+            score = (base_score + boost) * geo_weight
 
             if score > 0:
                 scored.append((score, src))
 
         scored.sort(key=lambda x: x[0], reverse=True)
         return [s for _, s in scored[:limit]]
+
+    def verify_source_connectivity(self, source_id: str) -> dict[str, Any]:
+        """Verify machine-readable or web connectivity metadata of a registered source."""
+        for src in self.catalog:
+            if src.id == source_id:
+                return {
+                    "source_id": src.id,
+                    "name": src.name,
+                    "authority": src.authority,
+                    "geography": src.geography,
+                    "base_url": src.base_url,
+                    "access_type": src.access_type,
+                    "data_formats": src.data_formats,
+                    "status": src.status.value,
+                    "is_configured": src.status in {SourceCoverageStatus.INTEGRATED, SourceCoverageStatus.CONFIGURED},
+                }
+        return {"source_id": source_id, "status": "unknown_source", "is_configured": False}
 
     def get_coverage_summary(self) -> dict[str, Any]:
         """Produce summary metrics of registered sources across geographies and statuses."""

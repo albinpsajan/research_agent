@@ -124,6 +124,19 @@ class GlobalToLocalAdaptation(BaseModel):
     required_modifications: list[str] = Field(default_factory=list)
     local_constraints: list[str] = Field(default_factory=list)
 
+    # Detailed localization dimensions
+    kerala_evidence: list[str] = Field(default_factory=list)
+    india_evidence: list[str] = Field(default_factory=list)
+    global_comparisons: list[str] = Field(default_factory=list)
+    existing_local_alternatives: list[str] = Field(default_factory=list)
+    international_alternatives: list[str] = Field(default_factory=list)
+    environmental_differences: list[str] = Field(default_factory=list)
+    economic_differences: list[str] = Field(default_factory=list)
+    cultural_considerations: list[str] = Field(default_factory=list)
+    infrastructure_limitations: list[str] = Field(default_factory=list)
+    regulatory_differences: list[str] = Field(default_factory=list)
+    genuine_innovation_introduced: str = ""
+
 
 class InnovationGap(BaseModel):
     """An identified gap in existing solutions."""

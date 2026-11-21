@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from src.evaluation.rubric import GATE_NAMES, EvaluationService
+from src.evaluation.rubric import GATE_NAMES, V1_GATE_NAMES, V2_GATE_NAMES, EvaluationService
 from src.models.candidate import (
     CandidateSolution,
     RiskAssessment,
     TechnicalRequirement,
 )
 from src.models.domain import ProblemCandidate, ProblemEvidence
+from src.models.evaluation import (
+    CandidateEvaluation,
+    EvaluationVersion,
+    QualityGate,
+    QualityGateStatus,
+    ScoreCriterion,
+)
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import (
     AdaptabilityClassification,
@@ -363,3 +370,126 @@ def test_event_mode_scores_all_criteria_out_of_100():
     assert eval_result.raw_score == 80.0
     assert eval_result.normalized_score == 80.0
     assert eval_result.total_score == 80.0
+
+
+# -------------------------------------------------------------
+# Test Suite: Versioned Evaluation Framework & Gate Statuses
+# -------------------------------------------------------------
+
+def test_v1_seven_gate_evaluation_runs_cleanly():
+    service = EvaluationService(FakeLLM(score=8.0), version=EvaluationVersion.V1_SEVEN_GATE)
+    assert service.version == EvaluationVersion.V1_SEVEN_GATE
+    cand = _make_candidate()
+    prob = _make_problem()
+    gap = _make_gap()
+    hackathon = _make_hackathon(hours=36)
+    intel = HackathonIntelligence(hackathon_input=hackathon)
+
+    eval_result = service.evaluate(cand, prob, gap, hackathon, intel)
+
+    assert eval_result.evaluation_version == EvaluationVersion.V1_SEVEN_GATE
+    assert len(eval_result.quality_gates) == 7
+    assert all(g.name in V1_GATE_NAMES for g in eval_result.quality_gates)
+    assert eval_result.all_gates_passed
+    assert eval_result.is_qualified
+
+
+def test_v2_ten_gate_evaluation_runs_cleanly():
+    service = EvaluationService(FakeLLM(score=8.0), version=EvaluationVersion.V2_TEN_GATE)
+    assert service.version == EvaluationVersion.V2_TEN_GATE
+    cand = _make_candidate()
+    prob = _make_problem()
+    gap = _make_gap()
+    hackathon = _make_hackathon(hours=36)
+    intel = HackathonIntelligence(hackathon_input=hackathon)
+
+    eval_result = service.evaluate(cand, prob, gap, hackathon, intel)
+
+    assert eval_result.evaluation_version == EvaluationVersion.V2_TEN_GATE
+    assert len(eval_result.quality_gates) == 10
+    assert all(g.name in V2_GATE_NAMES for g in eval_result.quality_gates)
+    assert eval_result.all_gates_passed
+    assert eval_result.is_qualified
+
+
+def test_gate2_insufficient_evidence_status_when_zero_sources():
+    service = EvaluationService(FakeLLM(score=8.0), version=EvaluationVersion.V2_TEN_GATE)
+    cand = _make_candidate()
+    prob = _make_problem(evidence_count=0)  # 0 sources -> INSUFFICIENT_EVIDENCE
+    hackathon = _make_hackathon()
+    intel = HackathonIntelligence(hackathon_input=hackathon)
+
+    eval_result = service.evaluate(cand, prob, _make_gap(), hackathon, intel)
+    gate = next(g for g in eval_result.quality_gates if g.name == V2_GATE_NAMES[1])
+    assert gate.status == QualityGateStatus.INSUFFICIENT_EVIDENCE
+    assert not eval_result.all_gates_passed
+    assert not eval_result.is_qualified
+
+
+def test_gate4_insufficient_evidence_status_when_unresearched():
+    service = EvaluationService(FakeLLM(score=8.0), version=EvaluationVersion.V2_TEN_GATE)
+    cand = _make_candidate()
+    prob = _make_problem()
+    gap = InnovationGap(
+        problem_candidate_id="P01",
+        classification=OpportunityClassification.INSUFFICIENT_EVIDENCE,
+        existing_solutions=[],
+        github_projects=[],
+        evidence_summary="",
+    )
+    hackathon = _make_hackathon()
+    intel = HackathonIntelligence(hackathon_input=hackathon)
+
+    eval_result = service.evaluate(cand, prob, gap, hackathon, intel)
+    gate = next(g for g in eval_result.quality_gates if g.name == V2_GATE_NAMES[3])
+    assert gate.status == QualityGateStatus.INSUFFICIENT_EVIDENCE
+    assert not eval_result.all_gates_passed
+    assert not eval_result.is_qualified
+
+
+def test_gate_not_applicable_status_does_not_fail_candidate():
+    eval_result = CandidateEvaluation(
+        candidate_id="C01",
+        candidate_title="Test Candidate",
+        domain="Agriculture",
+        scores=[
+            ScoreCriterion(
+                name="Real-world problem significance",
+                weight=20,
+                score=8.5,
+                weighted_score=17.0,
+                justification="Strong significance",
+            )
+        ],
+        raw_score=17.0,
+        normalized_score=85.0,
+        total_score=85.0,
+        evaluation_version=EvaluationVersion.V2_TEN_GATE,
+        quality_gates=[
+            QualityGate(
+                name=V2_GATE_NAMES[0],
+                description="Theme alignment",
+                status=QualityGateStatus.PASSED,
+            ),
+            QualityGate(
+                name="Sponsor-Specific Proprietary Tech Gate",
+                description="Optional sponsor technology constraint",
+                status=QualityGateStatus.NOT_APPLICABLE,
+                justification="General Theme Mode: No sponsor proprietary constraints exist.",
+            ),
+        ],
+    )
+    eval_result.calculate_total()
+    assert eval_result.all_gates_passed
+    assert eval_result.is_qualified
+
+
+def test_historical_payload_without_version_defaults_to_v1_if_seven_gates():
+    payload = {
+        "candidate_id": "C01",
+        "candidate_title": "Historical Candidate",
+        "domain": "Agriculture",
+        "quality_gates": [{"name": f"Gate {i}", "description": "desc"} for i in range(7)],
+    }
+    evaluation = CandidateEvaluation.model_validate(payload)
+    assert evaluation.evaluation_version == EvaluationVersion.V1_SEVEN_GATE

@@ -63,6 +63,17 @@ class CandidateSolution(BaseModel):
     kerala_adaptation: GlobalToLocalAdaptation | None = None
     target_geography: str = "kerala"
     target_districts: list[str] = Field(default_factory=list)
+    kerala_evidence: list[str] = Field(default_factory=list)
+    india_evidence: list[str] = Field(default_factory=list)
+    global_comparisons: list[str] = Field(default_factory=list)
+    existing_local_alternatives: list[str] = Field(default_factory=list)
+    international_alternatives: list[str] = Field(default_factory=list)
+    environmental_differences: list[str] = Field(default_factory=list)
+    economic_differences: list[str] = Field(default_factory=list)
+    cultural_considerations: list[str] = Field(default_factory=list)
+    infrastructure_limitations: list[str] = Field(default_factory=list)
+    regulatory_differences: list[str] = Field(default_factory=list)
+    genuine_innovation_introduced: str = ""
     economic_viability_notes: str = ""
     ethical_sustainability_notes: str = ""
     feasibility_score: float = Field(default=0.5, ge=0, le=1)

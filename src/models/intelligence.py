@@ -19,6 +19,11 @@ class IntelligenceItem(BaseModel):
     title: str
     description: str | None = None
     url: str | None = None
+    domain: str = ""
+    geography: str = "global"  # "kerala", "india", "global"
+    reliability: float = 0.8
+    relevance_score: float = 0.5
+    publication_date: datetime | None = None
     topics: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     retrieved_at: datetime = Field(default_factory=utc_now)
