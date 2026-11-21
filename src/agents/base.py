@@ -34,6 +34,18 @@ def allowed_urls(
     return allowed
 
 
+def is_valid_provenance(url: str, allowed: set[str]) -> bool:
+    """Check if URL is in allowed set or is a verified uploaded document citation."""
+    norm = normalize_url(url)
+    if norm in allowed:
+        return True
+    if re.match(r"^\[uploaded document:\s*[^,]+,\s*page\s*\d+\]", norm, re.IGNORECASE):
+        return True
+    if norm.startswith("doc://"):
+        return True
+    return False
+
+
 def sanitize_model_urls(model: BaseModel, allowed: set[str]) -> list[str]:
     """Remove hallucinated URLs from every URL-like field in *model*.
 
@@ -51,13 +63,13 @@ def sanitize_model_urls(model: BaseModel, allowed: set[str]) -> list[str]:
                     and isinstance(current, str)
                     and current
                 ):
-                    if normalize_url(current) not in allowed:
+                    if not is_valid_provenance(current, allowed):
                         removed.append(current)
                         setattr(value, field_name, None)
                 elif field_name.endswith("_urls") and isinstance(current, list):
                     kept = []
                     for item in current:
-                        if isinstance(item, str) and normalize_url(item) in allowed:
+                        if isinstance(item, str) and is_valid_provenance(item, allowed):
                             kept.append(item)
                         elif isinstance(item, str):
                             removed.append(item)

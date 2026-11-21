@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_ui_modules_import() -> None:
     import ui.components.common
+    import ui.pages.documents
     import ui.pages.history
     import ui.pages.intelligence
     import ui.pages.new_research
@@ -21,6 +22,7 @@ def test_ui_modules_import() -> None:
     assert all(
         [
             ui.components.common,
+            ui.pages.documents,
             ui.pages.history,
             ui.pages.intelligence,
             ui.pages.new_research,

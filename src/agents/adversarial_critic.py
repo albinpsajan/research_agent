@@ -29,6 +29,7 @@ from src.models.evaluation import (
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap
 from src.knowledge.hackathon_playbook import HackathonPlaybookService
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.base import SearchResult
 from src.research.registry import SearchBundle
 
@@ -233,6 +234,25 @@ class AdversarialCriticAgent(BaseAgent):
                         limit=3,
                     )
                     bundle.extend(extra)
+
+            # Inject relevant uploaded document evidence for debate verification
+            doc_service = DocumentIntelligenceService(self.repository, self.llm)
+            doc_hits = doc_service.search_evidence(
+                query=f"{candidate.title} {criticism.evidence_query} rules restrictions constraints",
+                session_id=session_id,
+                limit=3,
+            )
+            for h in doc_hits:
+                bundle.results.insert(
+                    0,
+                    SearchResult(
+                        title=f"Uploaded Document: {h.filename} (Page {h.page_number})",
+                        url=h.citation,
+                        snippet=h.text_content[:700],
+                        source_type="uploaded_document",
+                        reliability=0.95,
+                    ),
+                )
             bundle.dedupe()
 
             rebuttal = self._rebuttal(candidate, critique, bundle)
@@ -317,6 +337,13 @@ class AdversarialCriticAgent(BaseAgent):
         playbook_entries = playbook.retrieve_for_adversarial_critic(candidate.title)
         playbook_guidance = playbook.format_guidance_for_prompt(playbook_entries)
 
+        doc_service = DocumentIntelligenceService(self.repository, self.llm)
+        doc_hits = doc_service.search_evidence(
+            query=f"{candidate.title} rules judging criteria restrictions feasibility",
+            limit=3,
+        )
+        doc_rules = "\n".join(h.as_evidence_context(i) for i, h in enumerate(doc_hits, 1))
+
         prompt = f"""Candidate: {candidate.title}
 Domain: {candidate.domain}
 Problem: {candidate.problem_statement}
@@ -337,6 +364,9 @@ Gate failures: {[g.name for g in evaluation.quality_gates if g.status.value != "
 Prior debate: {prior or "none"}
 
 {playbook_guidance}
+
+UPLOADED OFFICIAL RULES & EVIDENCE BENCHMARKS:
+{doc_rules or "(none uploaded)"}
 
 Act as a hostile but fair hackathon judge. Challenge at least:
 - Is this important and genuinely relevant to the theme?

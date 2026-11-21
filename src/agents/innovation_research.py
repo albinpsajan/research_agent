@@ -19,6 +19,8 @@ from src.models.research import (
     VerificationLevel,
 )
 from src.knowledge.hackathon_playbook import HackathonPlaybookService
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
+from src.research.base import SearchResult
 from src.research.evidence_aggregator import EvidenceAggregator
 
 logger = get_logger("agents.innovation_research")
@@ -103,6 +105,25 @@ class InnovationResearchAgent(BaseAgent):
                 limit=5,
                 max_results=18,
             )
+            # Inject relevant uploaded research & prior-art document hits
+            doc_service = DocumentIntelligenceService(self.repository, self.llm)
+            doc_hits = doc_service.search_evidence(
+                query=f"{problem.title} {problem.domain} existing solutions limitations prior art",
+                session_id=session_id,
+                limit=4,
+            )
+            for h in doc_hits:
+                bundle.results.insert(
+                    0,
+                    SearchResult(
+                        title=f"Uploaded Document: {h.filename} (Page {h.page_number})",
+                        url=h.citation,
+                        snippet=h.text_content[:700],
+                        source_type="uploaded_document",
+                        reliability=0.95,
+                    ),
+                )
+
             # Ensure problem evidence is enriched with relevant research papers retrieved by Agent 3
             EvidenceAggregator.aggregate_problem_evidence(problem, bundle.results, min_sources=2)
             github_results = [r for r in bundle.results if r.source_type == "github"]

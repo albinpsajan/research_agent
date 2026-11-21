@@ -18,6 +18,7 @@ from src.models.domain import ProblemCandidate
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap, OpportunityClassification
 from src.knowledge.hackathon_playbook import HackathonPlaybookService
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.evidence_aggregator import EvidenceAggregator
 
 logger = get_logger("agents.solution_architect")
@@ -233,6 +234,14 @@ class SolutionArchitectAgent(BaseAgent):
         playbook_entries = playbook.retrieve_for_solution_architect(problem.domain, hours=available_hours)
         playbook_guidance = playbook.format_guidance_for_prompt(playbook_entries)
 
+        doc_service = DocumentIntelligenceService(self.repository, self.llm)
+        doc_hits = doc_service.search_evidence(
+            query=f"{problem.title} {problem.domain} architecture datasets API implementation feasibility",
+            session_id=session_id,
+            limit=4,
+        )
+        doc_context = "\n".join(h.as_evidence_context(i) for i, h in enumerate(doc_hits, 1))
+
         prompt = f"""Hackathon theme: {theme}
 Problem domain: {problem.domain} / {problem.subdomain or "general"}
 Problem candidate: {problem.title}
@@ -245,6 +254,10 @@ Inadequate current solutions: {problem.inadequate_solutions}
 Overlooked needs: {problem.overlooked_needs}
 
 {playbook_guidance}
+
+UPLOADED TECHNICAL SPECS & DATASET REFERENCES:
+{doc_context or "(none uploaded)"}
+
 Opportunity: {problem.emerging_opportunities}
 Existing solutions found:
 {existing_text}

@@ -19,6 +19,7 @@ from src.models.hackathon import (
 )
 from src.models.provenance import CategorizedConstraint, ProvenanceCategory
 from src.knowledge.hackathon_playbook import HackathonPlaybookService
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.base import ResearchError
 from src.research.registry import SearchBundle
 
@@ -202,6 +203,15 @@ facts; this is only a search plan."""
         playbook_entries = playbook.retrieve_for_intelligence(hackathon.theme)
         playbook_guidance = playbook.format_guidance_for_prompt(playbook_entries)
 
+        doc_service = DocumentIntelligenceService(self.repository, self.llm)
+        doc_hits = doc_service.search_evidence(
+            query=f"{hackathon.theme} {hackathon.name or ''} rules judging criteria restrictions eligibility track",
+            session_id=session_id,
+            limit=6,
+        )
+        doc_evidence_lines: list[str] = [h.as_evidence_context(i) for i, h in enumerate(doc_hits, 1)]
+        doc_citations: list[str] = [h.citation for h in doc_hits if h.citation]
+
         prompt = f"""Hackathon theme: {hackathon.theme}
 Hackathon name: {hackathon.name or "not supplied"}
 Official website: {hackathon.website_url or "not supplied"}
@@ -211,10 +221,13 @@ User constraints: {hackathon.constraints or "none"}
 
 {playbook_guidance}
 
+UPLOADED OFFICIAL EVENT DOCUMENTS & EVIDENCE (High Priority - Ground Truth):
+{chr(10).join(doc_evidence_lines) or "(no uploaded documents)"}
+
 OFFICIAL PAGE EXCERPTS:
 {chr(10).join(official_texts)[:9000] or "(none retrieved)"}
 
-RETRIEVED EVIDENCE (cite only these URLs):
+RETRIEVED EVIDENCE (cite only these URLs or uploaded documents):
 {_evidence(bundle)}
 
 RECENT CONTINUOUS INTELLIGENCE (may be irrelevant; use only if relevant):
@@ -231,12 +244,13 @@ Produce the Hackathon Intelligence Report. Determine:
 Keep lists focused (max 8 items each). Do not invent URLs."""
         result = self.llm.generate_json(prompt, HackathonIntelLLM, SYSTEM)
         allowed = allowed_urls(
-            bundle, page_urls + [hackathon.website_url or "", hackathon.rules_url or ""]
+            bundle, page_urls + [hackathon.website_url or "", hackathon.rules_url or ""] + doc_citations
         )
         sanitize_model_urls(result, allowed)
 
         research_sources = [r.url for r in bundle.results if r.url]
         research_sources.extend(u for u in page_urls if u)
+        research_sources.extend(doc_citations)
         research_sources = list(dict.fromkeys(research_sources))
 
         assumptions = list(result.assumptions)

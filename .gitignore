@@ -26,6 +26,8 @@ data/models/*
 !data/models/.gitkeep
 data/reports/*
 !data/reports/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
 user_settings.json
 data/user_settings.json
 

@@ -734,3 +734,266 @@ class Repository:
                 pass
         return res
 
+    # --- Document Intelligence ---
+
+    def save_uploaded_document(
+        self,
+        doc_id: str,
+        filename: str,
+        file_type: str,
+        file_size: int,
+        file_hash: str,
+        document_type: str = "general_evidence",
+        page_count: int = 1,
+        extraction_method: str = "embedded_text",
+        status: str = "uploaded",
+        session_id: str | None = None,
+        warnings: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """Persist or update an uploaded document record."""
+        warnings_json = json.dumps(warnings or [])
+        metadata_json = json.dumps(metadata or {})
+        with self.db.transaction() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO uploaded_documents 
+                   (id, session_id, filename, file_type, file_size, file_hash, document_type,
+                    page_count, extraction_method, status, warnings_json, metadata_json, is_active, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)""",
+                (
+                    doc_id,
+                    session_id,
+                    filename,
+                    file_type,
+                    file_size,
+                    file_hash,
+                    document_type,
+                    page_count,
+                    extraction_method,
+                    status,
+                    warnings_json,
+                    metadata_json,
+                ),
+            )
+        return doc_id
+
+    def get_uploaded_document(self, doc_id: str) -> dict[str, Any] | None:
+        """Fetch a single uploaded document by ID."""
+        row = self.db.fetch_one("SELECT * FROM uploaded_documents WHERE id=?", (doc_id,))
+        if not row:
+            return None
+        res = dict(row)
+        res["warnings"] = json.loads(res.get("warnings_json") or "[]")
+        res["metadata"] = json.loads(res.get("metadata_json") or "{}")
+        return res
+
+    def get_uploaded_document_by_hash(self, file_hash: str) -> dict[str, Any] | None:
+        """Check for existing duplicate document by SHA-256 hash."""
+        row = self.db.fetch_one(
+            "SELECT * FROM uploaded_documents WHERE file_hash=? ORDER BY created_at DESC LIMIT 1",
+            (file_hash,),
+        )
+        if not row:
+            return None
+        res = dict(row)
+        res["warnings"] = json.loads(res.get("warnings_json") or "[]")
+        res["metadata"] = json.loads(res.get("metadata_json") or "{}")
+        return res
+
+    def list_uploaded_documents(
+        self, session_id: str | None = None, is_active_only: bool = False
+    ) -> list[dict[str, Any]]:
+        """List uploaded documents, optionally filtered by session or active status."""
+        query = "SELECT * FROM uploaded_documents WHERE 1=1"
+        params: list[Any] = []
+        if session_id:
+            query += " AND (session_id=? OR session_id IS NULL)"
+            params.append(session_id)
+        if is_active_only:
+            query += " AND is_active=1"
+        query += " ORDER BY created_at DESC"
+        rows = self.db.fetch_all(query, tuple(params))
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["warnings"] = json.loads(d.get("warnings_json") or "[]")
+            d["metadata"] = json.loads(d.get("metadata_json") or "{}")
+            result.append(d)
+        return result
+
+    def update_document_status(
+        self,
+        doc_id: str,
+        status: str,
+        warnings: list[str] | None = None,
+        page_count: int | None = None,
+        extraction_method: str | None = None,
+    ) -> None:
+        """Update extraction status and optional attributes of an uploaded document."""
+        updates = ["status=?", "updated_at=CURRENT_TIMESTAMP"]
+        params: list[Any] = [status]
+        if warnings is not None:
+            updates.append("warnings_json=?")
+            params.append(json.dumps(warnings))
+        if page_count is not None:
+            updates.append("page_count=?")
+            params.append(page_count)
+        if extraction_method is not None:
+            updates.append("extraction_method=?")
+            params.append(extraction_method)
+        params.append(doc_id)
+        with self.db.transaction() as conn:
+            conn.execute(f"UPDATE uploaded_documents SET {', '.join(updates)} WHERE id=?", tuple(params))
+
+    def set_document_active(self, doc_id: str, is_active: bool) -> None:
+        """Toggle whether a document is in active project context."""
+        with self.db.transaction() as conn:
+            conn.execute(
+                "UPDATE uploaded_documents SET is_active=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (1 if is_active else 0, doc_id),
+            )
+
+    def delete_uploaded_document(self, doc_id: str) -> bool:
+        """Permanently delete an uploaded document and its chunks/extractions."""
+        with self.db.transaction() as conn:
+            conn.execute("DELETE FROM document_chunks_fts WHERE document_id=?", (doc_id,))
+            conn.execute("DELETE FROM document_chunks WHERE document_id=?", (doc_id,))
+            conn.execute("DELETE FROM document_structured_extractions WHERE document_id=?", (doc_id,))
+            cursor = conn.execute("DELETE FROM uploaded_documents WHERE id=?", (doc_id,))
+            return cursor.rowcount > 0
+
+    def save_document_chunks(self, chunks: list[dict[str, Any]]) -> None:
+        """Persist extracted document chunks and update FTS5 search index."""
+        if not chunks:
+            return
+        with self.db.transaction() as conn:
+            for ch in chunks:
+                chunk_id = ch.get("id") or str(uuid.uuid4())
+                tables_json = json.dumps(ch.get("tables", []))
+                conn.execute(
+                    """INSERT OR REPLACE INTO document_chunks
+                       (id, document_id, session_id, page_number, chunk_index, content_type,
+                        text_content, tables_json, extraction_method, confidence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        chunk_id,
+                        ch["document_id"],
+                        ch.get("session_id"),
+                        ch.get("page_number", 1),
+                        ch.get("chunk_index", 0),
+                        ch.get("content_type", "text"),
+                        ch["text_content"],
+                        tables_json,
+                        ch.get("extraction_method", "embedded_text"),
+                        ch.get("confidence", 1.0),
+                    ),
+                )
+                conn.execute(
+                    """INSERT INTO document_chunks_fts (chunk_id, document_id, text_content)
+                       VALUES (?, ?, ?)""",
+                    (chunk_id, ch["document_id"], ch["text_content"]),
+                )
+
+    def get_document_chunks(self, document_id: str) -> list[dict[str, Any]]:
+        """Retrieve all extracted chunks for a document ordered by page and index."""
+        rows = self.db.fetch_all(
+            "SELECT * FROM document_chunks WHERE document_id=? ORDER BY page_number ASC, chunk_index ASC",
+            (document_id,),
+        )
+        res = []
+        for r in rows:
+            d = dict(r)
+            d["tables"] = json.loads(d.get("tables_json") or "[]")
+            res.append(d)
+        return res
+
+    def search_document_chunks(
+        self,
+        query: str,
+        session_id: str | None = None,
+        document_ids: list[str] | None = None,
+        limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        """Full-text search over active document chunks with BM25 ranking."""
+        clean_q = "".join(c if c.isalnum() or c.isspace() else " " for c in query).strip()
+        tokens = [t for t in clean_q.split() if len(t) > 2]
+        if not tokens:
+            return []
+        fts_match = " OR ".join(tokens[:10])
+
+        sql = """
+            SELECT c.*, d.filename, d.document_type, rank
+            FROM document_chunks_fts f
+            JOIN document_chunks c ON f.chunk_id = c.id
+            JOIN uploaded_documents d ON c.document_id = d.id
+            WHERE document_chunks_fts MATCH ?
+              AND d.is_active = 1
+        """
+        params: list[Any] = [fts_match]
+        if session_id:
+            sql += " AND (c.session_id = ? OR c.session_id IS NULL)"
+            params.append(session_id)
+        if document_ids:
+            placeholders = ",".join("?" for _ in document_ids)
+            sql += f" AND c.document_id IN ({placeholders})"
+            params.extend(document_ids)
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(limit)
+
+        try:
+            rows = self.db.fetch_all(sql, tuple(params))
+        except Exception as exc:
+            logger.warning("FTS search error (%s), falling back to LIKE query: %s", clean_q, exc)
+            fallback_sql = """
+                SELECT c.*, d.filename, d.document_type, 1.0 as rank
+                FROM document_chunks c
+                JOIN uploaded_documents d ON c.document_id = d.id
+                WHERE d.is_active = 1 AND (c.text_content LIKE ?)
+            """
+            fallback_params: list[Any] = [f"%{tokens[0]}%"]
+            if session_id:
+                fallback_sql += " AND (c.session_id = ? OR c.session_id IS NULL)"
+                fallback_params.append(session_id)
+            fallback_sql += " LIMIT ?"
+            fallback_params.append(limit)
+            rows = self.db.fetch_all(fallback_sql, tuple(fallback_params))
+
+        res = []
+        for r in rows:
+            d = dict(r)
+            d["tables"] = json.loads(d.get("tables_json") or "[]")
+            res.append(d)
+        return res
+
+    def save_document_structured_extraction(
+        self,
+        doc_id: str,
+        extraction_type: str,
+        data_json: str,
+        session_id: str | None = None,
+    ) -> None:
+        """Persist structured intelligence extracted from an uploaded document."""
+        rec_id = str(uuid.uuid4())
+        with self.db.transaction() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO document_structured_extractions
+                   (id, document_id, session_id, extraction_type, data_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                (rec_id, doc_id, session_id, extraction_type, data_json),
+            )
+
+    def get_document_structured_extraction(self, doc_id: str) -> dict[str, Any] | None:
+        """Fetch the structured intelligence for a document."""
+        row = self.db.fetch_one(
+            "SELECT * FROM document_structured_extractions WHERE document_id=?",
+            (doc_id,),
+        )
+        if not row:
+            return None
+        res = dict(row)
+        try:
+            res["data"] = json.loads(res["data_json"])
+        except Exception:
+            res["data"] = {}
+        return res
+

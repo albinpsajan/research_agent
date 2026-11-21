@@ -47,6 +47,13 @@ def render() -> None:
                 "Constraints (optional)", placeholder="e.g. 36 hours, teams of 4"
             )
 
+        active_docs = repo.list_uploaded_documents(is_active_only=True)
+        if active_docs:
+            doc_summaries = [f"`{d['filename']}` ({d['document_type']})" for d in active_docs[:3]]
+            st.info(f"📁 **Active Document Intelligence:** Attached {len(active_docs)} document(s): {', '.join(doc_summaries)}. All 5 agents will cite these.")
+        else:
+            st.caption("💡 *Tip: Upload official PDF rulebooks or research papers in the **Documents** tab to give all 5 agents primary ground truth.*")
+
         g1, g2 = st.columns(2)
         with g1:
             geo_priority = st.selectbox(

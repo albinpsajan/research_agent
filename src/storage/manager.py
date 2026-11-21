@@ -36,12 +36,17 @@ class StorageManager:
 
     def ensure_dirs(self) -> None:
         """Create all configured data directories if they don't exist."""
-        for d in (
+        dirs = [
             self._storage.models_dir,
             self._storage.cache_dir,
             self._storage.reports_dir,
             self._storage.logs_dir,
-        ):
+        ]
+        uploads = getattr(self._storage, "uploads_dir", None)
+        if uploads:
+            dirs.append(uploads)
+
+        for d in dirs:
             Path(d).mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
@@ -79,6 +84,9 @@ class StorageManager:
             "reports": self.get_directory_size_gb(Path(self._storage.reports_dir)),
             "logs": self.get_directory_size_gb(Path(self._storage.logs_dir)),
         }
+        uploads = getattr(self._storage, "uploads_dir", None)
+        if uploads:
+            categories["uploads"] = self.get_directory_size_gb(Path(uploads))
 
         used_gb = sum(categories.values())
         budget_gb = self._storage.budget_gb

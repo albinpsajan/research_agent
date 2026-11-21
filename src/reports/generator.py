@@ -288,7 +288,7 @@ class ReportGenerator:
                 number=22,
                 title="Evidence links",
                 content=self._evidence_section(
-                    intelligence, domain_map, innovation, feasibility
+                    intelligence, domain_map, innovation, feasibility, session_id=result.session_id
                 ),
             )
         )
@@ -776,11 +776,25 @@ class ReportGenerator:
         domain_map: DomainMap | None,
         innovation: InnovationReport | None,
         feasibility: FeasibilityReport | None,
+        session_id: str | None = None,
     ) -> str:
         links = self._collect_evidence(
             intelligence, domain_map, innovation, feasibility
         )
-        return _bullets(links, "_No evidence links recorded._")
+        web_bullets = _bullets(links, "_No evidence links recorded._")
+        doc_section = ""
+        if session_id:
+            docs = self.repository.list_uploaded_documents(session_id, is_active_only=True)
+            if docs:
+                doc_lines = []
+                for d in docs:
+                    doc_lines.append(
+                        f"- **{d['filename']}** ({d['file_type'].upper()}, {d['page_count']} page(s), "
+                        f"extraction: `{d['extraction_method']}`) — "
+                        f"Verifiable Citation: `[Uploaded document: {d['filename']}, Page <N>]`"
+                    )
+                doc_section = "\n\n### Uploaded Primary Documents & Provenance Citations\n\n" + "\n".join(doc_lines)
+        return web_bullets + doc_section
 
     @staticmethod
     def _limitations_section(

@@ -27,6 +27,8 @@ from src.models.domain import (
 )
 from src.models.hackathon import HackathonIntelligence
 from src.knowledge.hackathon_playbook import HackathonPlaybookService
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
+from src.research.base import SearchResult
 from src.research.evidence_aggregator import EvidenceAggregator
 from src.research.sources import KeralaIndiaSourceRegistry
 
@@ -254,6 +256,25 @@ Return all genuinely relevant domains, ordered from highest to lowest relevance.
                 limit=4,
                 max_results=14,
             )
+            # Inject relevant uploaded research document hits into evidence bundle
+            doc_service = DocumentIntelligenceService(self.repository, self.llm)
+            doc_hits = doc_service.search_evidence(
+                query=f"{domain.name} {theme} problems challenges evidence",
+                session_id=session_id,
+                limit=4,
+            )
+            for h in doc_hits:
+                bundle.results.insert(
+                    0,
+                    SearchResult(
+                        title=f"Uploaded Document: {h.filename} (Page {h.page_number})",
+                        url=h.citation,
+                        snippet=h.text_content[:700],
+                        source_type="uploaded_document",
+                        reliability=0.95,
+                    ),
+                )
+
             domain.evidence = [r.url for r in bundle.results[:8] if r.url]
 
             problem_prompt = f"""Hackathon theme: {theme}

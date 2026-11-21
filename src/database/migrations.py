@@ -68,6 +68,65 @@ MIGRATIONS: tuple[Migration, ...] = (
         ALTER TABLE sessions ADD COLUMN multi_track_mode TEXT DEFAULT 'best_overall';
         """,
     ),
+    Migration(
+        4,
+        "Document intelligence, uploaded files, page chunks, FTS5 index and structured extraction",
+        """
+        CREATE TABLE IF NOT EXISTS uploaded_documents (
+            id TEXT PRIMARY KEY,
+            session_id TEXT REFERENCES sessions(id),
+            filename TEXT NOT NULL,
+            file_type TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            file_hash TEXT NOT NULL,
+            document_type TEXT NOT NULL DEFAULT 'general_evidence',
+            page_count INTEGER DEFAULT 1,
+            extraction_method TEXT NOT NULL DEFAULT 'embedded_text',
+            status TEXT NOT NULL DEFAULT 'uploaded',
+            warnings_json TEXT DEFAULT '[]',
+            metadata_json TEXT DEFAULT '{}',
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS document_chunks (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL REFERENCES uploaded_documents(id) ON DELETE CASCADE,
+            session_id TEXT REFERENCES sessions(id),
+            page_number INTEGER NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            content_type TEXT NOT NULL DEFAULT 'text',
+            text_content TEXT NOT NULL,
+            tables_json TEXT DEFAULT '[]',
+            extraction_method TEXT NOT NULL DEFAULT 'embedded_text',
+            confidence REAL DEFAULT 1.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS document_structured_extractions (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL UNIQUE REFERENCES uploaded_documents(id) ON DELETE CASCADE,
+            session_id TEXT REFERENCES sessions(id),
+            extraction_type TEXT NOT NULL DEFAULT 'hackathon_profile',
+            data_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_uploaded_docs_session ON uploaded_documents(session_id);
+        CREATE INDEX IF NOT EXISTS idx_uploaded_docs_hash ON uploaded_documents(file_hash);
+        CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc ON document_chunks(document_id);
+        CREATE INDEX IF NOT EXISTS idx_doc_chunks_session ON document_chunks(session_id);
+        CREATE INDEX IF NOT EXISTS idx_doc_chunks_page ON document_chunks(document_id, page_number);
+
+        CREATE VIRTUAL TABLE IF NOT EXISTS document_chunks_fts USING fts5(
+            chunk_id UNINDEXED,
+            document_id UNINDEXED,
+            text_content,
+            tokenize = 'porter unicode61'
+        );
+        """,
+    ),
 )
 
 

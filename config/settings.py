@@ -92,7 +92,20 @@ class StorageSettings(BaseModel):
     cache_dir: Path = Field(default_factory=lambda: _DATA_DIR / "cache")
     reports_dir: Path = Field(default_factory=lambda: _DATA_DIR / "reports")
     logs_dir: Path = Field(default_factory=lambda: _DATA_DIR / "logs")
+    uploads_dir: Path = Field(default_factory=lambda: _DATA_DIR / "uploads")
     db_path: Path = Field(default_factory=lambda: _DATA_DIR / "hackathoniq.db")
+
+
+class DocumentIntelligenceSettings(BaseModel):
+    """Document Intelligence and extraction settings."""
+
+    max_file_size_mb: int = Field(default=25, ge=1, le=100)
+    max_pages_per_doc: int = Field(default=50, ge=1, le=500)
+    ocr_timeout_seconds: int = Field(default=30, ge=5, le=120)
+    supported_extensions: list[str] = Field(
+        default_factory=lambda: [".pdf", ".jpg", ".jpeg", ".png", ".webp"]
+    )
+    tesseract_cmd: str | None = Field(default=None)
 
 
 class ResearchSettings(BaseModel):
@@ -208,6 +221,9 @@ class Settings(BaseModel):
     evaluation: EvaluationSettings = Field(default_factory=EvaluationSettings)
     continuous_intelligence: ContinuousIntelligenceSettings = Field(
         default_factory=ContinuousIntelligenceSettings
+    )
+    document_intelligence: DocumentIntelligenceSettings = Field(
+        default_factory=DocumentIntelligenceSettings
     )
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
@@ -353,12 +369,39 @@ class Settings(BaseModel):
                 )
             ),
         )
+        user_doc = (
+            user.get("document_intelligence", {})
+            if isinstance(user.get("document_intelligence"), dict)
+            else {}
+        )
+        doc_intel = DocumentIntelligenceSettings(
+            max_file_size_mb=int(
+                os.getenv(
+                    "DOC_INTEL_MAX_FILE_SIZE_MB",
+                    str(user_doc.get("max_file_size_mb", 25)),
+                )
+            ),
+            max_pages_per_doc=int(
+                os.getenv(
+                    "DOC_INTEL_MAX_PAGES_PER_DOC",
+                    str(user_doc.get("max_pages_per_doc", 50)),
+                )
+            ),
+            ocr_timeout_seconds=int(
+                os.getenv(
+                    "DOC_INTEL_OCR_TIMEOUT_SECONDS",
+                    str(user_doc.get("ocr_timeout_seconds", 30)),
+                )
+            ),
+            tesseract_cmd=os.getenv("TESSERACT_CMD") or user_doc.get("tesseract_cmd") or None,
+        )
         return cls(
             ollama=ollama,
             storage=storage,
             research=research,
             agent=agent,
             continuous_intelligence=ci,
+            document_intelligence=doc_intel,
             logging=logging_cfg,
         )
 
