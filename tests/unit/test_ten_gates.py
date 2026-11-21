@@ -493,3 +493,92 @@ def test_historical_payload_without_version_defaults_to_v1_if_seven_gates():
     }
     evaluation = CandidateEvaluation.model_validate(payload)
     assert evaluation.evaluation_version == EvaluationVersion.V1_SEVEN_GATE
+
+
+def test_high_numerical_score_cannot_bypass_failed_gate():
+    """Verify that a high numerical score (e.g. 95/100) strictly cannot bypass a failed quality gate."""
+    evaluation = CandidateEvaluation(
+        candidate_id="C01",
+        candidate_title="High Scoring Candidate with Defect",
+        domain="Agriculture",
+        scores=[
+            ScoreCriterion(
+                name="Real-world problem significance",
+                weight=50,
+                score=10.0,
+                weighted_score=50.0,
+                justification="Flawless significance",
+            ),
+            ScoreCriterion(
+                name="Technical feasibility",
+                weight=45,
+                score=10.0,
+                weighted_score=45.0,
+                justification="Excellent tech",
+            ),
+        ],
+        raw_score=95.0,
+        normalized_score=95.0,
+        total_score=95.0,
+        evaluation_version=EvaluationVersion.V2_TEN_GATE,
+        quality_gates=[
+            QualityGate(
+                name=V2_GATE_NAMES[0],
+                description="Theme alignment",
+                status=QualityGateStatus.PASSED,
+            ),
+            QualityGate(
+                name=V2_GATE_NAMES[1],
+                description="Real-world problem validation",
+                status=QualityGateStatus.FAILED,
+                justification="Fails gate due to zero verified independent sources.",
+            ),
+        ],
+    )
+    evaluation.calculate_total()
+    assert evaluation.total_score == 95.0
+    assert not evaluation.all_gates_passed
+    assert not evaluation.is_qualified
+
+
+def test_insufficient_evidence_status_strictly_disqualifies():
+    """Verify that INSUFFICIENT_EVIDENCE gate status strictly disqualifies candidate."""
+    evaluation = CandidateEvaluation(
+        candidate_id="C02",
+        candidate_title="Unverified Evidence Candidate",
+        domain="Agriculture",
+        scores=[],
+        raw_score=88.0,
+        normalized_score=88.0,
+        total_score=88.0,
+        evaluation_version=EvaluationVersion.V2_TEN_GATE,
+        quality_gates=[
+            QualityGate(
+                name=V2_GATE_NAMES[1],
+                description="Real-world problem validation",
+                status=QualityGateStatus.INSUFFICIENT_EVIDENCE,
+                justification="Zero authoritative sources exist in public registry.",
+            ),
+        ],
+    )
+    evaluation.calculate_total()
+    assert not evaluation.all_gates_passed
+    assert not evaluation.is_qualified
+
+
+def test_language_translation_alone_fails_differentiation_gate():
+    """Verify that superficial language translation alone fails Gate 5 differentiation."""
+    service = EvaluationService(FakeLLM(score=8.0), version=EvaluationVersion.V2_TEN_GATE)
+    # Differentiation under 30 chars or COMMONLY_SOLVED
+    cand = _make_candidate(differentiation_len=12)  # "Translated"
+    prob = _make_problem()
+    gap = _make_gap(classification=OpportunityClassification.COMMONLY_SOLVED)
+    hackathon = _make_hackathon()
+    intel = HackathonIntelligence(hackathon_input=hackathon)
+
+    eval_result = service.evaluate(cand, prob, gap, hackathon, intel)
+    gate5 = next(g for g in eval_result.quality_gates if g.name == V2_GATE_NAMES[4])
+    assert gate5.status == QualityGateStatus.FAILED
+    assert not eval_result.all_gates_passed
+    assert not eval_result.is_qualified
+

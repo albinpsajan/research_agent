@@ -2,6 +2,15 @@
 
 Tracks official government open data portals, meteorological repositories,
 agricultural universities, disaster authorities, and global open datasets.
+Provides independent tracking across 8 verification dimensions:
+1. is_registered
+2. connector_implemented
+3. successfully_queried
+4. useful_data_retrieved
+5. last_retrieval_date
+6. auth_requirement
+7. license_restriction
+8. current_availability
 """
 
 from __future__ import annotations
@@ -40,10 +49,20 @@ class OfficialSource(BaseModel):
     description: str = ""
     license: str = "Open Access / Government Open Data"
 
+    # 8 Independent verification dimensions
+    is_registered: bool = True
+    connector_implemented: bool = False
+    successfully_queried: bool = False
+    useful_data_retrieved: bool = False
+    last_retrieval_date: str = ""
+    auth_requirement: str = "none"
+    license_restriction: str = "open"
+    current_availability: str = "operational"
+
 
 OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
     # -------------------------------------------------------------
-    # Kerala Official Sources
+    # Kerala Official Sources (12 sources)
     # -------------------------------------------------------------
     OfficialSource(
         id="KL-001",
@@ -56,42 +75,78 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["governance", "demographics", "infrastructure", "agriculture", "education"],
         data_formats=["CSV", "JSON", "XML"],
         description="Official open government data portal for Kerala state departments, civic metrics, and spatial registries.",
+        license="Government Open Data License - India (GODL)",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-002",
         name="Department of Economics & Statistics Open Data Repository (DES ODR)",
         authority="Directorate of Economics & Statistics, Government of Kerala",
         geography="kerala",
-        base_url="https://des.kerala.gov.in",
+        base_url="https://ecostat.kerala.gov.in",
         access_type="bulk_download",
         status=SourceCoverageStatus.INTEGRATED,
         topics=["agriculture", "crop_statistics", "rainfall", "economic_review", "land_utilization"],
         data_formats=["PDF", "XLSX", "CSV"],
         description="Official Kerala statistical releases: Agricultural Statistics at a Glance, Land Utilization, District-wise crop yields, and Annual Economic Reviews.",
+        license="Government Open Data",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-003",
         name="KAU Agromet Advisory Bulletins",
         authority="Kerala Agricultural University (KAU) & IMD Agromet",
         geography="kerala",
-        base_url="https://kau.in/agromet",
+        base_url="https://kau.in",
         access_type="rss",
         status=SourceCoverageStatus.INTEGRATED,
         topics=["agriculture", "weather_advisory", "pest_warning", "monsoon_forecast", "crop_management"],
         data_formats=["PDF", "HTML", "RSS"],
         description="District-specific bi-weekly agro-meteorological advisories tailored to Kerala's 5 agro-ecological zones with localized pest/disease warnings.",
+        license="Open Public Extension / Research",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_educational",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-004",
         name="Kerala State Disaster Management Authority (KSDMA)",
         authority="Department of Revenue and Disaster Management, Government of Kerala",
         geography="kerala",
-        base_url="https://ksdma.kerala.gov.in",
+        base_url="https://sdma.kerala.gov.in",
         access_type="web_portal",
         status=SourceCoverageStatus.INTEGRATED,
         topics=["landslides", "floods", "coastal_erosion", "disaster_risk", "hazard_maps"],
         data_formats=["PDF", "GeoTIFF", "HTML"],
         description="Official disaster management authority providing landslide susceptibility zones (Wayanad, Idukki), flood inundation maps (Kuttanad), and dam alert levels.",
+        license="Government Open Data / Public Safety",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-005",
@@ -104,6 +159,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["climate_resilience", "water_resources", "biodiversity", "renewable_energy", "forests"],
         data_formats=["PDF"],
         description="State policy blueprint defining climate vulnerabilities, greenhouse gas inventories, and priority adaptation sectors across Kerala.",
+        license="Public Policy Document",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-006",
@@ -116,6 +180,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["health", "telemedicine", "disease_surveillance", "dengue", "epidemiology", "public_health"],
         data_formats=["PDF", "HTML", "JSON"],
         description="Official state public health monitoring agency delivering communicable disease surveillance bulletins (dengue, leptospirosis) and rural telemedicine infrastructure records.",
+        license="Public Health Data",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-007",
@@ -128,6 +201,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["agriculture", "smallholder_support", "homestead_farming", "crop_insurance", "organic_farming"],
         data_formats=["HTML", "PDF", "CSV"],
         description="State agrarian mission records, Krishi Bhavan network contacts, smallholder subsidy allocations, and localized crop loss assistance portals.",
+        license="Government Public Extension",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-008",
@@ -140,6 +222,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["emissions", "greenhouse_gas", "renewable_energy", "energy_efficiency", "carbon_accounting"],
         data_formats=["XLSX", "PDF"],
         description="Sub-national greenhouse gas emission inventories across agriculture, energy, and land use sectors in Kerala.",
+        license="Public Environmental Registry",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-009",
@@ -152,6 +243,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["wayanad", "landslides", "tribal_welfare", "coffee_plantation", "agroforestry"],
         data_formats=["HTML", "PDF"],
         description="Aspirational district administrative portal covering hilly terrain disaster zones, tribal agrarian communities, and coffee/spice plantation data.",
+        license="Government Public Portal",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-010",
@@ -164,6 +264,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["alappuzha", "kuttanad", "below_sea_level_farming", "flooding", "paddy_polders", "salinity"],
         data_formats=["HTML", "PDF"],
         description="Official administration and wetland agricultural monitoring portal for Kuttanad's below-sea-level UNESCO Globally Important Agricultural Heritage System (GIAHS).",
+        license="Government Public Portal",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-011",
@@ -176,6 +285,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["palakkad", "drought", "rain_shadow", "groundwater", "rice_bowl", "irrigation"],
         data_formats=["HTML", "PDF"],
         description="Administrative portal covering Kerala's primary rice granary, Palakkad gap rain shadow zones, drought indicators, and canal irrigation networks.",
+        license="Government Public Portal",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="KL-012",
@@ -188,10 +306,19 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["idukki", "landslides", "high_ranges", "tea_cardamom", "dam_levels", "forests"],
         data_formats=["HTML", "PDF"],
         description="Official high-range district portal tracking mountain slope stability, reservoir capacities (Idukki Arch Dam), and spice smallholder statistics.",
+        license="Government Public Portal",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
 
     # -------------------------------------------------------------
-    # National (India-Wide) Official Sources
+    # National (India-Wide) Official Sources (8 sources)
     # -------------------------------------------------------------
     OfficialSource(
         id="IN-001",
@@ -204,6 +331,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["agriculture", "market_prices", "demographics", "health", "water_resources"],
         data_formats=["JSON", "CSV", "XML"],
         description="National open data repository with APIs for agricultural market mandi prices (Agmarknet), rainfall anomalies, and rural development metrics.",
+        license="National Data Sharing and Accessibility Policy (NDSAP)",
+        is_registered=True,
+        connector_implemented=True,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="free_api_key_for_bulk",
+        license_restriction="national_data_sharing_and_accessibility_policy",
+        current_availability="operational",
     ),
     OfficialSource(
         id="IN-002",
@@ -216,6 +352,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["crop_varieties", "soil_health", "horticulture", "agroforestry", "pest_control"],
         data_formats=["PDF", "HTML"],
         description="Premier national agricultural research body releasing verified crop varieties, soil fertility maps, and agroforestry package of practices.",
+        license="Open Access Public Research",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_access_public",
+        current_availability="operational",
     ),
     OfficialSource(
         id="IN-003",
@@ -228,6 +373,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["weather", "monsoon", "rainfall_grid", "cyclones", "heatwave"],
         data_formats=["JSON", "Gridded NetCDF", "HTML"],
         description="Official national weather agency providing 0.25x0.25 degree daily gridded rainfall, high-resolution monsoon radar, and extreme weather nowcasts.",
+        license="Open Weather Data Policy",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_weather_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="IN-004",
@@ -240,6 +394,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["satellite_imagery", "soil_moisture", "flood_inundation", "land_use", "cartography"],
         data_formats=["WMS", "WFS", "GeoTIFF", "HDF5"],
         description="National geospatial satellite portal delivering Resourcesat, Cartosat, and Oceansat imagery, LULC maps, and real-time flood inundation vectors.",
+        license="ISRO Open Data Policy",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none_for_wms_catalog",
+        license_restriction="isro_open_data_policy",
+        current_availability="operational",
     ),
     OfficialSource(
         id="IN-005",
@@ -252,6 +415,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["district_indicators", "poverty", "health", "financial_inclusion", "rural_infrastructure"],
         data_formats=["CSV", "PDF"],
         description="Granular socio-economic and rural development monitoring framework across 112 aspirational districts including Wayanad (Kerala).",
+        license="Open Government Data",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="IN-006",
@@ -264,6 +436,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["national_accounts", "economic_census", "consumer_price_index", "rural_demographics", "civic_indicators"],
         data_formats=["CSV", "XLSX", "PDF"],
         description="Central statistical agency publishing National Sample Surveys (NSSO), Periodic Labour Force Surveys, and rural socio-economic datasets.",
+        license="Open Government Data",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_government_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="IN-007",
@@ -276,6 +457,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["health", "medical", "epidemiology", "dengue", "disease_surveillance", "telemedicine", "clinical"],
         data_formats=["PDF", "HTML", "JSON"],
         description="Apex biomedical research organization tracking communicable diseases, vector control, infectious outbreak models, and rural health clinics.",
+        license="Public Biomedical Research Open Data",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_biomedical_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="IN-008",
@@ -288,10 +478,19 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["satellite_imagery", "remote_sensing", "multispectral", "land_surface", "open_data"],
         data_formats=["GeoTIFF", "HDF5", "NetCDF"],
         description="India's open satellite data dissemination gateway providing Sentinel, Landsat, and Indian remote sensing satellite passes.",
+        license="NRSC Satellite Data Policy",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="free_registration_for_raster_download",
+        license_restriction="nrsc_satellite_data_policy",
+        current_availability="operational",
     ),
 
     # -------------------------------------------------------------
-    # Global Official Sources
+    # Global Official Sources (9 sources)
     # -------------------------------------------------------------
     OfficialSource(
         id="GL-001",
@@ -304,18 +503,36 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["global_agriculture", "food_security", "crop_yields", "fertilizer_use", "land_cover"],
         data_formats=["JSON", "CSV"],
         description="Global benchmark statistical database covering crop production, trade, greenhouse gas emissions, and food security indicators across 245 countries.",
+        license="CC BY-NC-SA 3.0 IGO",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="cc_by_3_0_igo",
+        current_availability="operational",
     ),
     OfficialSource(
         id="GL-002",
         name="World Bank Open Data",
         authority="The World Bank Group",
         geography="global",
-        base_url="https://data.worldbank.org",
+        base_url="https://api.worldbank.org/v2",
         access_type="open_api",
         status=SourceCoverageStatus.INTEGRATED,
         topics=["economic_indicators", "rural_population", "climate_change", "infrastructure", "poverty"],
         data_formats=["JSON", "XML", "CSV"],
         description="Standardized global socio-economic and climate resilience indicators with comprehensive open REST APIs.",
+        license="CC BY 4.0",
+        is_registered=True,
+        connector_implemented=True,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="cc_by_4_0",
+        current_availability="operational",
     ),
     OfficialSource(
         id="GL-003",
@@ -328,18 +545,36 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["sentinel_satellite", "radar_sar", "land_surface_temperature", "soil_moisture", "era5_climate"],
         data_formats=["SAFE", "NetCDF", "GeoTIFF"],
         description="Global open satellite constellation: Sentinel-1 (C-band SAR radar for all-weather/cloud penetration) and Sentinel-2 (optical multi-spectral), plus ERA5 reanalysis.",
+        license="Open Access for Sentinel Data",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="free_registration_for_bulk",
+        license_restriction="copernicus_open_access_policy",
+        current_availability="operational",
     ),
     OfficialSource(
         id="GL-004",
-        name="NASA Earthdata (SEDAC, LP DAAC, MODIS/VIIRS)",
+        name="NASA Earthdata (SEDAC, LP DAAC, MODIS/VIIRS, CMR)",
         authority="National Aeronautics and Space Administration (NASA)",
         geography="global",
-        base_url="https://earthdata.nasa.gov",
+        base_url="https://cmr.earthdata.nasa.gov/search/collections.json",
         access_type="open_api",
         status=SourceCoverageStatus.INTEGRATED,
         topics=["evapotranspiration", "vegetation_indices", "precipitation_gpm", "elevation_srtm"],
         data_formats=["HDF", "GeoTIFF", "NetCDF"],
         description="Global Earth observation datasets including SRTM 30m digital elevation, GPM precipitation, and MODIS vegetation health indices.",
+        license="NASA Open Science Data Policy",
+        is_registered=True,
+        connector_implemented=True,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none_for_cmr_search",
+        license_restriction="nasa_open_science_data",
+        current_availability="operational",
     ),
     OfficialSource(
         id="GL-005",
@@ -352,6 +587,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["health", "epidemiology", "disease_outbreaks", "mortality", "public_health_indicators", "telemedicine"],
         data_formats=["JSON", "CSV", "XML"],
         description="Global health statistics, infectious disease outbreak trackers, universal health coverage metrics, and rural healthcare accessibility standards.",
+        license="CC BY-NC-SA 3.0 IGO",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_access_who",
+        current_availability="operational",
     ),
     OfficialSource(
         id="GL-006",
@@ -364,6 +608,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["education", "literacy", "vernacular_learning", "science_policy", "cultural_heritage"],
         data_formats=["JSON", "CSV"],
         description="Global datasets on literacy, mother-tongue education frameworks, digital learning in vernacular languages, and open science initiatives.",
+        license="CC BY-SA 3.0 IGO",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_access_unesco",
+        current_availability="operational",
     ),
     OfficialSource(
         id="GL-007",
@@ -376,6 +629,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["education", "child_welfare", "maternal_health", "nutrition", "rural_communities"],
         data_formats=["JSON", "CSV"],
         description="Cross-national database on child nutrition, early education, village community resilience, and maternal health metrics.",
+        license="Open Access Public Data",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=False,
+        useful_data_retrieved=False,
+        last_retrieval_date="",
+        auth_requirement="none",
+        license_restriction="open_access_unicef",
+        current_availability="cloudflare_bot_blocked",
     ),
     OfficialSource(
         id="GL-008",
@@ -388,6 +650,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["weather_extremes", "cyclone_tracking", "monsoon_climatology", "hydrometeorology"],
         data_formats=["GRIB2", "NetCDF", "PDF"],
         description="Global coordinated atmospheric observation system tracking tropical cyclone tracks, extreme precipitation anomalies, and regional drought trends.",
+        license="WMO Resolution 40 (Free and Unrestricted)",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="wmo_resolution_40",
+        current_availability="operational",
     ),
     OfficialSource(
         id="GL-009",
@@ -400,6 +671,15 @@ OFFICIAL_SOURCE_CATALOG: list[OfficialSource] = [
         topics=["environmental_degradation", "biodiversity", "freshwater", "land_degradation", "climate_adaptation"],
         data_formats=["JSON", "CSV", "GeoTIFF"],
         description="Authoritative international portal providing global and regional environmental statistics, freshwater ecosystem indicators, and biodiversity metrics.",
+        license="Open Access Environmental Data",
+        is_registered=True,
+        connector_implemented=False,
+        successfully_queried=True,
+        useful_data_retrieved=True,
+        last_retrieval_date="2026-11-21",
+        auth_requirement="none",
+        license_restriction="open_access_unep",
+        current_availability="operational",
     ),
 ]
 
@@ -477,21 +757,65 @@ class KeralaIndiaSourceRegistry:
                     "data_formats": src.data_formats,
                     "status": src.status.value,
                     "is_configured": src.status in {SourceCoverageStatus.INTEGRATED, SourceCoverageStatus.CONFIGURED},
+                    "is_registered": src.is_registered,
+                    "connector_implemented": src.connector_implemented,
+                    "successfully_queried": src.successfully_queried,
+                    "useful_data_retrieved": src.useful_data_retrieved,
+                    "last_retrieval_date": src.last_retrieval_date,
+                    "auth_requirement": src.auth_requirement,
+                    "license_restriction": src.license_restriction,
+                    "current_availability": src.current_availability,
                 }
         return {"source_id": source_id, "status": "unknown_source", "is_configured": False}
+
+    def get_source_coverage_table(self) -> list[dict[str, Any]]:
+        """Return the complete 8-column independent status table for all registered sources."""
+        table = []
+        for src in self.catalog:
+            table.append({
+                "source_id": src.id,
+                "name": src.name,
+                "geography": src.geography,
+                "authority": src.authority,
+                "base_url": src.base_url,
+                "access_type": src.access_type,
+                # 8 independent status dimensions
+                "is_registered": src.is_registered,
+                "connector_implemented": src.connector_implemented,
+                "successfully_queried": src.successfully_queried,
+                "useful_data_retrieved": src.useful_data_retrieved,
+                "last_retrieval_date": src.last_retrieval_date,
+                "auth_requirement": src.auth_requirement,
+                "license_restriction": src.license_restriction,
+                "current_availability": src.current_availability,
+            })
+        return table
 
     def get_coverage_summary(self) -> dict[str, Any]:
         """Produce summary metrics of registered sources across geographies and statuses."""
         by_geo: dict[str, int] = {}
         by_status: dict[str, int] = {}
+        connector_implemented_count = 0
+        successfully_queried_count = 0
+        useful_data_retrieved_count = 0
+
         for src in self.catalog:
             by_geo[src.geography] = by_geo.get(src.geography, 0) + 1
             by_status[src.status.value] = by_status.get(src.status.value, 0) + 1
+            if src.connector_implemented:
+                connector_implemented_count += 1
+            if src.successfully_queried:
+                successfully_queried_count += 1
+            if src.useful_data_retrieved:
+                useful_data_retrieved_count += 1
 
         return {
             "total_official_sources": len(self.catalog),
             "by_geography": by_geo,
             "by_status": by_status,
+            "connector_implemented_count": connector_implemented_count,
+            "successfully_queried_count": successfully_queried_count,
+            "useful_data_retrieved_count": useful_data_retrieved_count,
         }
 
     def format_source_recommendations(self, sources: list[OfficialSource]) -> str:
@@ -511,8 +835,8 @@ class KeralaIndiaSourceRegistry:
         queries: list[str] = []
         if geography in {"kerala", "all"}:
             queries.extend([
-                f"{theme_or_domain} site:data.kerala.gov.in OR site:des.kerala.gov.in",
-                f"{theme_or_domain} site:kau.in OR site:ksdma.kerala.gov.in",
+                f"{theme_or_domain} site:data.kerala.gov.in OR site:ecostat.kerala.gov.in",
+                f"{theme_or_domain} site:kau.in OR site:sdma.kerala.gov.in",
                 f"Kerala {theme_or_domain} State Action Plan on Climate Change",
             ])
         if geography in {"india", "all"}:

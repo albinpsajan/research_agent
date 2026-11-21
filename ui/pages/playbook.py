@@ -88,8 +88,15 @@ def render() -> None:
         st.caption(f"Showing {len(displayed_entries)} playbook lesson(s)")
 
         for entry in displayed_entries:
+            prov_type = getattr(entry, "provenance_type", "official_criteria").replace("_", " ").title()
+            author = getattr(entry, "author_or_creator", "") or entry.source_origin
+            source_url = getattr(entry, "source_url", "")
             with st.expander(f"[{entry.id}] {entry.title} ({entry.category.value.replace('_', ' ').title()})"):
-                st.markdown(f"**Target Agent:** `{entry.target_agent}` | **Source Origin:** *{entry.source_origin}* | **Confidence:** `{entry.confidence:.2f}`")
+                st.markdown(
+                    f"**Target Agent:** `{entry.target_agent}` | **Provenance Type:** `{prov_type}` | **Author/Creator:** *{author}* | **Confidence:** `{entry.confidence:.2f}`"
+                )
+                if source_url:
+                    st.markdown(f"**Source Document:** [{source_url}]({source_url})")
                 st.markdown(f"**Lesson:**\n{entry.lesson}")
                 st.info(f"**Actionable Guidance for Agents:**\n{entry.actionable_guidance}")
                 st.markdown(f"**Kerala & India Localization:**\n{entry.kerala_india_applicability}")
@@ -98,7 +105,39 @@ def render() -> None:
                     st.markdown(f"**Tags:** {tags_badges}")
 
     with tab2:
-        st.subheader("Authoritative Kerala, India & Global Source Registry")
+        st.subheader("Authoritative Kerala, India & Global Source Registry (29 Sources)")
+        summary_info = registry.get_coverage_summary()
+        st.caption(
+            f"Independent Status Tracking: Total Sources: {summary_info['total_official_sources']} "
+            f"(Kerala: {summary_info['by_geography'].get('kerala', 0)}, "
+            f"India: {summary_info['by_geography'].get('india', 0)}, "
+            f"Global: {summary_info['by_geography'].get('global', 0)}) | "
+            f"Connectors Implemented: {summary_info['connector_implemented_count']} | "
+            f"Successfully Queried: {summary_info['successfully_queried_count']} | "
+            f"Useful Data Retrieved: {summary_info['useful_data_retrieved_count']}"
+        )
+
+        show_table_view = st.checkbox("Show 8-Dimension Verification Table", value=False)
+        if show_table_view:
+            coverage_data = registry.get_source_coverage_table()
+            st.dataframe(
+                coverage_data,
+                column_config={
+                    "source_id": "ID",
+                    "name": "Portal Name",
+                    "geography": "Geo",
+                    "is_registered": "Registered",
+                    "connector_implemented": "Connector",
+                    "successfully_queried": "Queried (200)",
+                    "useful_data_retrieved": "Data Retrieved",
+                    "last_retrieval_date": "Last Retrieved",
+                    "auth_requirement": "Auth Requirement",
+                    "license_restriction": "License",
+                    "current_availability": "Availability",
+                },
+                use_container_width=True,
+            )
+
         geo_col, topic_col = st.columns([1, 2])
         with geo_col:
             geo_choice = st.selectbox("Geographical Scope", ["All", "Kerala", "India", "Global"])
@@ -118,7 +157,7 @@ def render() -> None:
         st.caption(f"Showing {len(filtered_sources)} official source portal(s)")
 
         for src in filtered_sources:
-            status_color = "#6ee7a8" if src.status == SourceCoverageStatus.INTEGRATED else "#f5b942"
+            status_color = "#6ee7a8" if src.successfully_queried else "#f5b942"
             with st.container():
                 st.markdown(
                     f"""
@@ -129,7 +168,7 @@ def render() -> None:
                             </div>
                             <div>
                                 <span style="background: {status_color}22; color: {status_color}; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
-                                    {src.status.value.upper()}
+                                    {'QUERIED OK' if src.successfully_queried else src.current_availability.upper()}
                                 </span>
                                 <span style="background: #2a3447; color: #cbd5e1; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; margin-left: 6px;">
                                     {src.geography.upper()}
@@ -137,7 +176,7 @@ def render() -> None:
                             </div>
                         </div>
                         <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 4px;">
-                            <strong>Authority:</strong> {src.authority} | <strong>Access:</strong> {src.access_type} | <strong>Formats:</strong> {', '.join(src.data_formats)}
+                            <strong>Authority:</strong> {src.authority} | <strong>Access:</strong> {src.access_type} | <strong>Formats:</strong> {', '.join(src.data_formats)} | <strong>Auth:</strong> {src.auth_requirement}
                         </div>
                         <div style="color: #cbd5e1; font-size: 0.88rem; margin-top: 6px;">
                             {src.description}

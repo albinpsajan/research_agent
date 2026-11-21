@@ -19,6 +19,15 @@ class PlaybookCategory(StrEnum):
     LOCALIZATION_STRATEGY = "localization_strategy"
 
 
+class PlaybookProvenanceType(StrEnum):
+    """Classification of the original knowledge source."""
+
+    OFFICIAL_CRITERIA = "official_criteria"
+    PARTICIPANT_GUIDE = "participant_guide"
+    JUDGE_RETROSPECTIVE = "judge_retrospective"
+    ENGINEERING_LESSON = "engineering_lesson"
+
+
 class PlaybookEntry(BaseModel):
     """A structured lesson learned from hackathon judges, organizers, and winners."""
 
@@ -32,3 +41,11 @@ class PlaybookEntry(BaseModel):
     kerala_india_applicability: str = ""
     tags: list[str] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0, le=1)
+
+    # Provenance tracking
+    provenance_type: str = PlaybookProvenanceType.OFFICIAL_CRITERIA.value
+    source_url: str = ""
+    author_or_creator: str = ""
+    publication_date: str = ""
+    transcript_available: bool = False
+    readme_reference: str = ""

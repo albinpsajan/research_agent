@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Any, Generator
 
 from config.logging_config import get_logger
-from src.knowledge.hackathon_playbook.schema import PlaybookCategory, PlaybookEntry
+from src.knowledge.hackathon_playbook.schema import (
+    PlaybookCategory,
+    PlaybookEntry,
+    PlaybookProvenanceType,
+)
 from src.knowledge.hackathon_playbook.seed_data import PLAYBOOK_SEED_ENTRIES
 
 logger = get_logger("knowledge.hackathon_playbook.database")
@@ -51,10 +55,31 @@ class PlaybookDatabase:
                     target_agent TEXT NOT NULL,
                     kerala_india_applicability TEXT NOT NULL,
                     tags TEXT NOT NULL,
-                    confidence REAL NOT NULL
+                    confidence REAL NOT NULL,
+                    provenance_type TEXT NOT NULL DEFAULT 'official_criteria',
+                    source_url TEXT NOT NULL DEFAULT '',
+                    author_or_creator TEXT NOT NULL DEFAULT '',
+                    publication_date TEXT NOT NULL DEFAULT '',
+                    transcript_available INTEGER NOT NULL DEFAULT 0,
+                    readme_reference TEXT NOT NULL DEFAULT ''
                 )
                 """
             )
+            # Run ALTER TABLE to ensure backward compatibility with older DB schemas
+            columns_to_add = [
+                ("provenance_type", "TEXT NOT NULL DEFAULT 'official_criteria'"),
+                ("source_url", "TEXT NOT NULL DEFAULT ''"),
+                ("author_or_creator", "TEXT NOT NULL DEFAULT ''"),
+                ("publication_date", "TEXT NOT NULL DEFAULT ''"),
+                ("transcript_available", "INTEGER NOT NULL DEFAULT 0"),
+                ("readme_reference", "TEXT NOT NULL DEFAULT ''"),
+            ]
+            for col_name, col_def in columns_to_add:
+                try:
+                    conn.execute(f"ALTER TABLE playbook_entries ADD COLUMN {col_name} {col_def}")
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
+
             # Create FTS5 virtual table
             try:
                 conn.execute(
@@ -80,8 +105,10 @@ class PlaybookDatabase:
                 INSERT OR REPLACE INTO playbook_entries (
                     id, category, title, source_origin, lesson,
                     actionable_guidance, target_agent, kerala_india_applicability,
-                    tags, confidence
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    tags, confidence, provenance_type, source_url,
+                    author_or_creator, publication_date, transcript_available,
+                    readme_reference
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry.id,
@@ -94,6 +121,12 @@ class PlaybookDatabase:
                     entry.kerala_india_applicability,
                     json.dumps(entry.tags),
                     entry.confidence,
+                    entry.provenance_type,
+                    entry.source_url,
+                    entry.author_or_creator,
+                    entry.publication_date,
+                    1 if entry.transcript_available else 0,
+                    entry.readme_reference,
                 ),
             )
             # Update FTS5
@@ -119,12 +152,12 @@ class PlaybookDatabase:
                 pass
             conn.commit()
 
-    def seed_if_empty(self) -> int:
-        """Seed the database with default curated playbook entries if empty."""
+    def seed_if_empty(self, force: bool = False) -> int:
+        """Seed the database with default curated playbook entries if empty or forced."""
         with self._get_connection() as conn:
             cur = conn.execute("SELECT COUNT(*) FROM playbook_entries")
             count = cur.fetchone()[0]
-            if count == 0:
+            if count == 0 or force:
                 logger.info(f"Seeding playbook database with {len(PLAYBOOK_SEED_ENTRIES)} entries.")
                 for entry in PLAYBOOK_SEED_ENTRIES:
                     self.insert_entry(entry)
@@ -151,7 +184,6 @@ class PlaybookDatabase:
         cleaned_words = re.findall(r"[A-Za-z0-9_]{3,}", query)
 
         with self._get_connection() as conn:
-            fts_worked = False
             if cleaned_words:
                 fts_query = " OR ".join(f'"{w}"*' for w in cleaned_words[:6])
                 try:
@@ -173,7 +205,6 @@ class PlaybookDatabase:
 
                     rows = conn.execute(sql, params).fetchall()
                     results = [self._row_to_entry(r) for r in rows]
-                    fts_worked = True
                 except sqlite3.OperationalError as e:
                     logger.debug(f"FTS search failed or not available ({e}), trying fallback.")
 
@@ -213,6 +244,15 @@ class PlaybookDatabase:
         except Exception:
             tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
 
+        # Handle provenance fields gracefully
+        keys = row.keys()
+        provenance_type = row["provenance_type"] if "provenance_type" in keys and row["provenance_type"] else PlaybookProvenanceType.OFFICIAL_CRITERIA.value
+        source_url = row["source_url"] if "source_url" in keys and row["source_url"] else ""
+        author_or_creator = row["author_or_creator"] if "author_or_creator" in keys and row["author_or_creator"] else ""
+        publication_date = row["publication_date"] if "publication_date" in keys and row["publication_date"] else ""
+        transcript_available = bool(row["transcript_available"]) if "transcript_available" in keys else False
+        readme_reference = row["readme_reference"] if "readme_reference" in keys and row["readme_reference"] else ""
+
         return PlaybookEntry(
             id=row["id"],
             category=PlaybookCategory(row["category"]),
@@ -224,4 +264,10 @@ class PlaybookDatabase:
             kerala_india_applicability=row["kerala_india_applicability"],
             tags=tags,
             confidence=float(row["confidence"]),
+            provenance_type=provenance_type,
+            source_url=source_url,
+            author_or_creator=author_or_creator,
+            publication_date=publication_date,
+            transcript_available=transcript_available,
+            readme_reference=readme_reference,
         )
