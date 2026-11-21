@@ -667,10 +667,20 @@ class ReportGenerator:
     def _feasibility_section(solution: CandidateSolution | None) -> str:
         if not solution:
             return "_No winner to assess._"
+        hours_str = (
+            f"{solution.estimated_hours:.1f} hours"
+            if solution.estimated_hours is not None
+            else "not estimated"
+        )
+        feasibility_str = (
+            f"{solution.feasibility_score:.2f} / 1.00"
+            if solution.feasibility_score is not None
+            else "not scored"
+        )
         return (
             f"**Development complexity:** {solution.development_complexity}\n\n"
-            f"**Estimated build time:** {solution.estimated_hours:.1f} hours\n\n"
-            f"**Feasibility score:** {solution.feasibility_score:.2f} / 1.00\n\n"
+            f"**Estimated build time:** {hours_str}\n\n"
+            f"**Feasibility score:** {feasibility_str}\n\n"
             f"**Estimated cost:** {solution.estimated_cost}\n\n"
             f"**Infrastructure:** {', '.join(solution.infrastructure_requirements) or 'not specified'}\n\n"
             f"**Dependencies:** {', '.join(solution.dependencies) or 'not specified'}"
