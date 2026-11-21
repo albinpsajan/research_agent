@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any
 
 from config.logging_config import get_logger
@@ -150,7 +150,7 @@ class HackathonAutoConfigurator:
         return hackathon_input, status, profile.conflicts
 
     @staticmethod
-    def _parse_deadline(val: str | None) -> date | None:
+    def _parse_deadline(val: str | None) -> datetime | None:
         """Parse diverse date formats safely without hallucinating."""
         if not val or not isinstance(val, str):
             return None
@@ -158,12 +158,27 @@ class HackathonAutoConfigurator:
         # Clean string
         val_clean = val.strip()
 
+        # Try date range or ordinal date: e.g. "5–7 February 2027", "5th to 7th February 2027", "7 February 2027"
+        range_match = re.search(
+            r"(?:\d{1,2}(?:st|nd|rd|th)?\s*(?:to|–|-)\s*)?(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\s+(\d{4})",
+            val_clean,
+            re.IGNORECASE,
+        )
+        if range_match:
+            d_str, m_str, y_str = range_match.group(1), range_match.group(2), range_match.group(3)
+            for fmt in ("%d %B %Y", "%d %b %Y"):
+                try:
+                    dt = datetime.strptime(f"{d_str} {m_str} {y_str}", fmt)
+                    return datetime.combine(dt.date(), time(18, 0))
+                except ValueError:
+                    continue
+
         # Try ISO format YYYY-MM-DD
         iso_match = re.search(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", val_clean)
         if iso_match:
             try:
                 y, m, d = int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3))
-                return date(y, m, d)
+                return datetime.combine(date(y, m, d), time(18, 0))
             except ValueError:
                 pass
 
@@ -172,7 +187,7 @@ class HackathonAutoConfigurator:
         if slash_match:
             try:
                 d, m, y = int(slash_match.group(1)), int(slash_match.group(2)), int(slash_match.group(3))
-                return date(y, m, d)
+                return datetime.combine(date(y, m, d), time(18, 0))
             except ValueError:
                 pass
 
@@ -180,7 +195,7 @@ class HackathonAutoConfigurator:
         for fmt in ("%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y"):
             try:
                 dt = datetime.strptime(val_clean, fmt)
-                return dt.date()
+                return datetime.combine(dt.date(), time(18, 0))
             except ValueError:
                 continue
 

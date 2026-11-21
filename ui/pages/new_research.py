@@ -7,6 +7,7 @@ from datetime import date, datetime, time, timedelta
 import streamlit as st
 
 from config.settings import get_settings
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
 from src.models.pipeline import PipelineOptions, PipelineResult
 from src.orchestration.pipeline import HackathonPipeline
@@ -16,6 +17,16 @@ from ui.components.common import get_llm, get_repository, hero, ollama_banner
 
 def render() -> None:
     settings = get_settings()
+    repo = get_repository()
+    service = DocumentIntelligenceService(repository=repo)
+
+    # Retrieve auto-configuration from active uploaded documents if available
+    auto_cfg: HackathonInput | None = st.session_state.get("configured_hackathon")
+    if not auto_cfg:
+        auto_cfg = service.get_active_auto_configuration()
+        if auto_cfg:
+            st.session_state["configured_hackathon"] = auto_cfg
+
     hero(
         "Turn a theme into one defensible idea",
         "Five specialist agents research the organisers, discover domains dynamically, "
@@ -30,21 +41,43 @@ def render() -> None:
         "Crossref, RSS, Wikipedia, Hacker News · no paid AI API required"
     )
 
+    if auto_cfg:
+        track_cnt = len(auto_cfg.tracks)
+        track_info = f" ({track_cnt} dynamic tracks extracted)" if track_cnt else ""
+        st.info(
+            f"📁 **Document Intelligence Active:** Pre-filled configuration from **{auto_cfg.name or 'Uploaded Document'}**"
+            f"{track_info}. All 5 agents cite active documents as primary ground truth. "
+            "You can review, modify, or run research directly."
+        )
+
+    default_theme = auto_cfg.theme if auto_cfg else ""
+    default_name = auto_cfg.name or "" if auto_cfg else ""
+    default_website = auto_cfg.website_url or "" if auto_cfg else ""
+    default_rules = auto_cfg.rules_url or "" if auto_cfg else ""
+    default_constraints = auto_cfg.constraints or "" if auto_cfg else ""
+    default_is_multi_track = auto_cfg.is_multi_track if auto_cfg else False
+    default_mode_index = 1 if (auto_cfg and auto_cfg.multi_track_mode == MultiTrackMode.BEST_PER_TRACK) else 0
+    default_num_tracks = len(auto_cfg.tracks) if (auto_cfg and auto_cfg.tracks) else 2
+    default_has_deadline = bool(auto_cfg and auto_cfg.deadline)
+
     with st.form("research_form"):
         st.markdown("### The brief")
         theme = st.text_area(
             "Hackathon theme *",
+            value=default_theme,
             placeholder="e.g. Sustainable cities and inclusive urban life",
             height=90,
         )
         col1, col2 = st.columns(2)
         with col1:
-            name = st.text_input("Hackathon name (optional)")
-            website = st.text_input("Official website (optional)")
+            name = st.text_input("Hackathon name (optional)", value=default_name)
+            website = st.text_input("Official website (optional)", value=default_website)
         with col2:
-            rules = st.text_input("Rules URL (optional)")
+            rules = st.text_input("Rules URL (optional)", value=default_rules)
             constraints = st.text_input(
-                "Constraints (optional)", placeholder="e.g. 36 hours, teams of 4"
+                "Constraints (optional)",
+                value=default_constraints,
+                placeholder="e.g. 36 hours, teams of 4",
             )
 
         active_docs = repo.list_uploaded_documents(is_active_only=True)
@@ -76,21 +109,22 @@ def render() -> None:
                 default=["Wayanad", "Alappuzha", "Palakkad", "Idukki"],
             )
 
-        deadline_known = st.checkbox("I know the submission deadline", value=False)
+        deadline_known = st.checkbox("I know the submission deadline", value=default_has_deadline)
         deadline: datetime | None = None
         if deadline_known:
-            default_date = date.today() + timedelta(days=2)
+            default_date = auto_cfg.deadline.date() if (auto_cfg and auto_cfg.deadline) else (date.today() + timedelta(days=2))
+            default_time = auto_cfg.deadline.time() if (auto_cfg and auto_cfg.deadline) else time(18, 0)
             c1, c2 = st.columns(2)
             with c1:
                 chosen_date = st.date_input("Deadline date", value=default_date)
             with c2:
-                chosen_time = st.time_input("Deadline time (local)", value=time(18, 0))
+                chosen_time = st.time_input("Deadline time (local)", value=default_time)
             deadline = datetime.combine(chosen_date, chosen_time)
 
         st.markdown("### Multi-track hackathon support")
         is_multi_track = st.checkbox(
             "Enable Multi-Track Hackathon Research",
-            value=False,
+            value=default_is_multi_track,
             help="Allows submitting multiple tracks. Evaluates each track independently and compares them.",
         )
         track_inputs: list[tuple[str, str, str, str]] = []
@@ -102,7 +136,7 @@ def render() -> None:
                     "Mode A: Best Overall Track (identify the single strongest opportunity across all tracks)",
                     "Mode B: Best Idea Per Track (identify the strongest qualifying idea independently for each track)",
                 ],
-                index=0,
+                index=default_mode_index,
             )
             multi_track_mode = (
                 MultiTrackMode.BEST_PER_TRACK
@@ -110,20 +144,29 @@ def render() -> None:
                 else MultiTrackMode.BEST_OVERALL
             )
             num_tracks = st.number_input(
-                "Number of tracks", min_value=1, max_value=30, value=2, step=1
+                "Number of tracks", min_value=1, max_value=30, value=default_num_tracks, step=1
             )
             st.caption(
                 "Define tracks below. Tracks can have only a name, or full descriptions and specific constraints."
             )
             for i in range(int(num_tracks)):
-                with st.expander(f"Track {i+1} Details", expanded=(i < 3)):
+                track_obj = auto_cfg.tracks[i] if (auto_cfg and i < len(auto_cfg.tracks)) else None
+                t_def_name = track_obj.name if track_obj else ""
+                t_def_desc = track_obj.description if track_obj else ""
+                t_def_rules = track_obj.track_rules if track_obj else ""
+                t_def_url = track_obj.official_track_url if track_obj else ""
+
+                expander_title = f"Track {i+1} Details: {t_def_name}" if t_def_name else f"Track {i+1} Details"
+                with st.expander(expander_title, expanded=(i < 3)):
                     t_name = st.text_input(
                         f"Track {i+1} Name *",
+                        value=t_def_name,
                         key=f"t_name_{i}",
                         placeholder=f"e.g. Healthcare AI / Track {i+1}",
                     )
                     t_desc = st.text_area(
                         f"Track {i+1} Description (optional)",
+                        value=t_def_desc,
                         key=f"t_desc_{i}",
                         height=65,
                     )
@@ -131,11 +174,13 @@ def render() -> None:
                     with c_tr1:
                         t_rules = st.text_input(
                             f"Track {i+1} Specific Rules / Constraints (optional)",
+                            value=t_def_rules,
                             key=f"t_rules_{i}",
                         )
                     with c_tr2:
                         t_url = st.text_input(
                             f"Track {i+1} Official URL (optional)",
+                            value=t_def_url,
                             key=f"t_url_{i}",
                         )
                     track_inputs.append((t_name, t_desc, t_rules, t_url))

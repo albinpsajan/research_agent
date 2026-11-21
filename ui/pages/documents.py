@@ -77,12 +77,12 @@ def render() -> None:
             selected_mode = (
                 MultiTrackMode.BEST_OVERALL
                 if "Mode A" in auto_mode_choice
-                else MultiTrackMode.BEST_IDEA_PER_TRACK
+                else MultiTrackMode.BEST_PER_TRACK
             )
             auto_launch_research = st.checkbox(
                 "Automatically launch research immediately after extraction",
-                value=False,
-                help="If enabled, research starts as soon as documents are parsed and validated without waiting for a click.",
+                value=True,
+                help="If enabled, research starts automatically as soon as documents are parsed and validated.",
             )
 
         if uploaded_files and st.button("⚡ Ingest, Understand & Configure Event", type="primary"):
@@ -335,7 +335,17 @@ def _execute_research_workflow(
     hackathon_input: HackathonInput,
 ) -> None:
     """Runs the 5-agent research pipeline with live progress and logs."""
+    if st.session_state.get("doc_research_running", False):
+        st.warning("Autonomous research workflow is already running.")
+        return
+
+    exec_key = f"{hackathon_input.name}:{hackathon_input.theme}:{len(hackathon_input.tracks)}:{hackathon_input.multi_track_mode.value}"
+    if st.session_state.get("last_executed_hash") == exec_key and st.session_state.get("doc_research_result") is not None:
+        st.info("Results already generated for this configuration. View below or click to run a fresh evaluation.")
+        return
+
     st.session_state["doc_research_running"] = True
+    st.session_state["last_executed_hash"] = exec_key
     progress_bar = st.progress(0.0)
     agent_status_box = st.empty()
     activity_log = st.expander("Live Agent Activity Stream", expanded=True)
@@ -361,6 +371,7 @@ def _execute_research_workflow(
             st.rerun()
     except Exception as exc:  # noqa: BLE001
         st.session_state["doc_research_running"] = False
+        st.session_state.pop("last_executed_hash", None)
         st.error(f"Research execution encountered an error: {exc}")
 
 

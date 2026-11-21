@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -260,6 +261,10 @@ Ensure all extracted facts are strictly grounded in the document text."""
                     unverified_items=[f"Automatic LLM structuring encountered error: {exc}"],
                 )
 
+            # Enrich profile using deterministic heuristics over document chunks and extracted facts
+            all_chunk_text = "\n\n".join(ch["text_content"] for ch in chunks)
+            res = self.enrich_hackathon_profile(res, all_chunk_text, filename)
+
             # Ground scalar field provenance with current document filename
             for f_name in ("hackathon_name", "organizer", "official_website", "theme", "submission_deadline", "event_duration", "start_date", "end_date"):
                 val = getattr(res, f_name, None)
@@ -502,6 +507,153 @@ Analyze this research/evidence document. Extract findings, problem definitions, 
             session_id=doc.get("session_id"),
         )
 
+    @classmethod
+    def enrich_hackathon_profile(
+        cls,
+        doc: StructuredHackathonDoc,
+        raw_text: str = "",
+        filename: str = "document.pdf",
+    ) -> StructuredHackathonDoc:
+        """Enriches structured hackathon document when LLM returns facts inside text or facts array."""
+        facts = doc.extracted_facts or []
+
+        # 1. Event Name
+        if not doc.hackathon_name or doc.hackathon_name.strip() in ("", "None", "null"):
+            for f in facts:
+                m = re.search(
+                    r"([A-Za-z0-9\s]+?(?:Season\s*\d+|Hackathon|Challenge\s*\d*))\s+(?:is\s+held|takes\s+place|organized)",
+                    f,
+                    re.IGNORECASE,
+                )
+                if m:
+                    doc.hackathon_name = m.group(1).strip()
+                    break
+            if not doc.hackathon_name or doc.hackathon_name.strip() in ("", "None", "null"):
+                m = re.search(r"\b([A-Za-z0-9\s]{3,40}(?:SEASON\s*\d+|HACKATHON|CHALLENGE))\b", raw_text[:3000], re.IGNORECASE)
+                if m:
+                    doc.hackathon_name = m.group(1).strip().title()
+
+        # 2. Dates / Submission Deadline
+        if not doc.submission_deadline and not doc.important_deadlines:
+            for f in facts:
+                m = re.search(
+                    r"(\d{1,2}(?:st|nd|rd|th)?(?:\s+to\s+|\s*–\s*|\s*-\s*)\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})",
+                    f,
+                    re.IGNORECASE,
+                )
+                if m:
+                    doc.submission_deadline = m.group(1).strip()
+                    doc.important_deadlines.append(m.group(1).strip())
+                    break
+            if not doc.submission_deadline:
+                m = re.search(
+                    r"(\d{1,2}(?:st|nd|rd|th)?(?:\s+to\s+|\s*–\s*|\s*-\s*)\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})",
+                    raw_text[:3000],
+                    re.IGNORECASE,
+                )
+                if m:
+                    doc.submission_deadline = m.group(1).strip()
+                    doc.important_deadlines.append(m.group(1).strip())
+
+        # 3. Dynamic Tracks & Track Rules
+        if not doc.extracted_tracks and not doc.tracks:
+            discovered_tracks: list[ExtractedTrack] = []
+            for f in facts:
+                if "tracks:" in f.lower() or "tracks are:" in f.lower():
+                    part = re.split(r"tracks(?:\s+are)?:\s*", f, flags=re.IGNORECASE)[1].rstrip(".").strip()
+                    track_names = [t.strip().lstrip("and ").strip() for t in part.split(",") if t.strip()]
+                    for idx, t_name in enumerate(track_names, start=1):
+                        p1_m = re.search(r"0\d\s+" + re.escape(t_name) + r"\s+([^\n]+)", raw_text, re.IGNORECASE)
+                        desc = p1_m.group(1).strip() if p1_m else None
+                        if not desc:
+                            for df in facts:
+                                if df.lower().startswith(f"{t_name.lower()} focuses on") or df.lower().startswith(f"{t_name.lower()} is about") or df.lower().startswith(f"{t_name.lower()} deals with"):
+                                    desc = df
+                                    break
+                        rule_str = ""
+                        num_str = f"0{idx}"
+                        # Check text chunks / sections for this specific track's rules
+                        for block in raw_text.split("\n\n"):
+                            if (f"TRACK {num_str}" in block or f"{num_str} OF" in block or t_name.upper() in block.upper()) and "IN SCOPE" in block:
+                                in_scope_m = re.search(r"IN SCOPE\s*\n([^\n]+)", block)
+                                not_track_m = re.search(r"NOT THIS TRACK\s*\n([^\n]+)", block)
+                                in_s = in_scope_m.group(1).strip() if in_scope_m else ""
+                                not_t = not_track_m.group(1).strip() if not_track_m else ""
+                                rule_str = f"In Scope: {in_s}. Excluded: {not_t}".strip(". ")
+                                break
+
+                        discovered_tracks.append(
+                            ExtractedTrack(
+                                name=t_name,
+                                description=desc or "",
+                                track_rules=rule_str,
+                                source_filename=filename,
+                                source_page=1,
+                                confidence=0.95,
+                            )
+                        )
+                    break
+
+            if not discovered_tracks:
+                for m in re.finditer(r"0([1-9])\s+([A-Za-z0-9\s]+?)\s+([A-Z][a-z]+(?:\s+[a-z]+)+[^\n]*)", raw_text):
+                    t_name = m.group(2).strip()
+                    t_desc = m.group(3).strip()
+                    if len(t_name) >= 3 and not any(t.name.lower() == t_name.lower() for t in discovered_tracks):
+                        discovered_tracks.append(
+                            ExtractedTrack(
+                                name=t_name,
+                                description=t_desc,
+                                track_rules="",
+                                source_filename=filename,
+                                source_page=1,
+                                confidence=0.92,
+                            )
+                        )
+
+            if discovered_tracks:
+                doc.extracted_tracks = discovered_tracks
+                doc.tracks = [t.name for t in discovered_tracks]
+
+        # 4. Theme Synthesis
+        if not doc.theme or doc.theme.strip() in ("", "None", "null"):
+            if doc.hackathon_name and doc.tracks:
+                doc.theme = f"{doc.hackathon_name}: {', '.join(doc.tracks)}"
+            elif doc.tracks:
+                doc.theme = f"Multi-Track Innovation: {', '.join(doc.tracks)}"
+
+        # 5. Organizer
+        if not doc.organizer or doc.organizer.strip() in ("", "None", "null"):
+            for f in facts:
+                if "organized by" in f.lower() or "hosted by" in f.lower():
+                    m = re.search(r"(?:organized|hosted)\s+by\s+([^,.]+)", f, re.IGNORECASE)
+                    if m:
+                        doc.organizer = m.group(1).strip()
+                        break
+            if not doc.organizer:
+                m = re.search(r"CODE\s*·\s*([A-Za-z0-9\s(),]+?)(?:\n|$)", raw_text)
+                if m:
+                    doc.organizer = m.group(1).strip()
+
+        # 6. Provenanced Fields
+        if doc.hackathon_name and "hackathon_name" not in doc.provenanced_fields:
+            doc.provenanced_fields["hackathon_name"] = ProvenancedField(
+                value=doc.hackathon_name, filename=filename, page=1, confidence=0.95
+            )
+        if doc.theme and "theme" not in doc.provenanced_fields:
+            doc.provenanced_fields["theme"] = ProvenancedField(
+                value=doc.theme, filename=filename, page=1, confidence=0.92
+            )
+        if doc.submission_deadline and "submission_deadline" not in doc.provenanced_fields:
+            doc.provenanced_fields["submission_deadline"] = ProvenancedField(
+                value=doc.submission_deadline, filename=filename, page=1, confidence=0.90
+            )
+        if doc.organizer and "organizer" not in doc.provenanced_fields:
+            doc.provenanced_fields["organizer"] = ProvenancedField(
+                value=doc.organizer, filename=filename, page=1, confidence=0.90
+            )
+
+        return doc
+
     def consolidate_session_documents(
         self, session_id: str | None = None
     ) -> tuple[StructuredHackathonDoc, list[ExtractedConflict]]:
@@ -513,6 +665,10 @@ Analyze this research/evidence document. Extract findings, problem definitions, 
             if struct and struct.get("data"):
                 try:
                     prof = StructuredHackathonDoc.model_validate(struct["data"])
+                    if not prof.tracks or not prof.hackathon_name:
+                        chunks = self.repository.get_document_chunks(d.id)
+                        chunk_texts = [c["text_content"] for c in chunks]
+                        prof = self.enrich_hackathon_profile(prof, "\n\n".join(chunk_texts), d.filename)
                     profiles_to_merge.append((prof, d.filename, d.document_type))
                 except (ValueError, TypeError) as exc:
                     logger.debug("Failed validating structured hackathon doc for %s: %s", d.filename, exc)
@@ -535,6 +691,20 @@ Analyze this research/evidence document. Extract findings, problem definitions, 
             user_overrides=user_overrides,
         )
         return hackathon_input, status, all_conflicts, profile
+
+    def get_active_auto_configuration(
+        self,
+        session_id: str | None = None,
+        mode: MultiTrackMode = MultiTrackMode.BEST_OVERALL,
+    ) -> HackathonInput | None:
+        """Retrieve or compute the active auto-configured HackathonInput from active uploaded documents."""
+        active_docs = self.list_documents(session_id=session_id, is_active_only=True)
+        if not active_docs:
+            return None
+        h_input, status, _, _ = self.auto_configure_hackathon(session_id=session_id, mode=mode)
+        if h_input and status.is_ready_for_research:
+            return h_input
+        return None
 
     def execute_automated_research(
         self,
