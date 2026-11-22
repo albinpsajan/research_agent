@@ -8,7 +8,7 @@ from enum import StrEnum
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
+from pydantic import AliasChoices, BaseModel, Field, ValidationInfo, field_validator
 
 from src.models.provenance import CategorizedConstraint
 from src.utils.hackathon_time import utc_now
@@ -77,8 +77,17 @@ class HackathonTrack(BaseModel):
     id: str = Field(default_factory=lambda: f"TRK-{uuid4().hex[:6]}")
     name: str = Field(..., min_length=2, description="Track name")
     description: str | None = Field(default=None, description="Track description, scope or problem statement guidance")
-    track_rules: str | None = Field(default=None, description="Track-specific constraints, rules, or judging criteria")
+    track_rules: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("track_rules", "rules"),
+        description="Track-specific constraints, rules, or judging criteria",
+    )
     official_track_url: str | None = Field(default=None, description="URL to official track documentation")
+
+    @property
+    def rules(self) -> str | None:
+        """Alias property for compatibility with 'rules' parameter."""
+        return self.track_rules
 
     @field_validator("official_track_url", mode="before")
     @classmethod

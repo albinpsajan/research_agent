@@ -54,6 +54,19 @@ def test_1_track_constructed_without_official_track_url() -> None:
     t3 = HackathonTrack(name="The Rails", official_track_url="   ")
     assert t3.official_track_url is None
 
+    # Construction with 'rules' alias and official_track_url=None
+    track = HackathonTrack(
+        name="Agents in Production",
+        description="Test description",
+        rules="Test rules",
+        official_track_url=None,
+    )
+    assert track.name == "Agents in Production"
+    assert track.description == "Test description"
+    assert track.track_rules == "Test rules"
+    assert track.rules == "Test rules"
+    assert track.official_track_url is None
+
 
 def test_2_track_accepts_valid_http_and_https_urls() -> None:
     """2. HackathonTrack accepts official HTTP and HTTPS URLs."""
