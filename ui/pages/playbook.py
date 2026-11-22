@@ -9,19 +9,15 @@ from src.knowledge.hackathon_playbook.schema import PlaybookCategory
 from src.research.sources.kerala_india_registry import KeralaIndiaSourceRegistry
 
 
+from ui.components.common import hero
+
+
 def render() -> None:
-    st.markdown(
-        """
-        <div style="padding-bottom: 12px;">
-            <div style="font-size: 1.8rem; font-weight: 700; color: #e9edf2;">
-                Hackathon <span style="color: #f5b942;">Playbook</span> & Source Registry
-            </div>
-            <div style="color: #9aa7b8; font-size: 0.95rem;">
-                Curated competition heuristics, winning patterns, judge insights, and authoritative Kerala, India & Global data sources.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    hero(
+        "Hackathon Playbook & Authoritative Source Registry",
+        "Curated competition heuristics, winning patterns, judge insights, and authoritative Kerala, India & Global data portals.",
+        eyebrow="Knowledge Base",
+        badge_text="FTS5 Indexed",
     )
 
     db = PlaybookDatabase()

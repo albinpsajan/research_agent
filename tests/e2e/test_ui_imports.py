@@ -15,9 +15,11 @@ def test_ui_modules_import() -> None:
     import ui.pages.history
     import ui.pages.intelligence
     import ui.pages.new_research
+    import ui.pages.overview
     import ui.pages.playbook
     import ui.pages.results
     import ui.pages.settings
+    import ui.pages.workspace
 
     assert all(
         [
@@ -26,9 +28,11 @@ def test_ui_modules_import() -> None:
             ui.pages.history,
             ui.pages.intelligence,
             ui.pages.new_research,
+            ui.pages.overview,
             ui.pages.playbook,
             ui.pages.results,
             ui.pages.settings,
+            ui.pages.workspace,
         ]
     )
 
