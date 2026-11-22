@@ -18,6 +18,8 @@ from src.agents.base import (
     evidence_from_indices,
     evidence_lines,
     similarity,
+    stem_tokens,
+    token_similarity,
 )
 from src.models.domain import (
     DiscoveredDomain,
@@ -229,6 +231,7 @@ Return all genuinely relevant domains. Quality over quantity; keep list entries 
             )
 
         problems: list[ProblemCandidate] = []
+        problems_tokens: list[set[str]] = []
         for domain in domains:
             # Use the LLM's search plan from the matched raw item.
             raw = next(
@@ -345,9 +348,11 @@ Avoid generic problems included only to increase candidate count."""
                 )
                 # Ensure independent supporting sources from the domain bundle are associated
                 EvidenceAggregator.aggregate_problem_evidence(candidate, bundle.results, min_sources=2)
-                if self._is_duplicate(candidate, problems):
+                cand_tokens = stem_tokens(f"{candidate.title} {candidate.description}")
+                if self._is_duplicate(candidate, problems, existing_tokens=problems_tokens, candidate_tokens=cand_tokens):
                     continue
                 problems.append(candidate)
+                problems_tokens.append(cand_tokens)
                 if len(problems) >= self.settings.max_total_problems:
                     break
             if len(problems) >= self.settings.max_total_problems:
@@ -355,11 +360,14 @@ Avoid generic problems included only to increase candidate count."""
 
         # Cross-domain duplicate detection is repeated after all domains.
         unique: list[ProblemCandidate] = []
+        unique_tokens: list[set[str]] = []
         for candidate in sorted(
             problems, key=lambda p: (p.confidence, len(p.evidence)), reverse=True
         ):
-            if not self._is_duplicate(candidate, unique):
+            c_toks = stem_tokens(f"{candidate.title} {candidate.description}")
+            if not self._is_duplicate(candidate, unique, existing_tokens=unique_tokens, candidate_tokens=c_toks):
                 unique.append(candidate)
+                unique_tokens.append(c_toks)
         problems = unique[: self.settings.max_total_problems]
 
         for index, candidate in enumerate(problems, start=1):
@@ -382,11 +390,21 @@ Avoid generic problems included only to increase candidate count."""
 
     @staticmethod
     def _is_duplicate(
-        candidate: ProblemCandidate, existing: list[ProblemCandidate]
+        candidate: ProblemCandidate,
+        existing: list[ProblemCandidate],
+        existing_tokens: list[set[str]] | None = None,
+        candidate_tokens: set[str] | None = None,
     ) -> bool:
-        text = f"{candidate.title} {candidate.description}"
+        c_toks = candidate_tokens if candidate_tokens is not None else stem_tokens(f"{candidate.title} {candidate.description}")
+        if not c_toks:
+            return False
+        if existing_tokens is not None:
+            for o_toks in existing_tokens:
+                if token_similarity(c_toks, o_toks) > 0.72:
+                    return True
+            return False
         for other in existing:
-            other_text = f"{other.title} {other.description}"
-            if similarity(text, other_text) > 0.72:
+            o_toks = stem_tokens(f"{other.title} {other.description}")
+            if token_similarity(c_toks, o_toks) > 0.72:
                 return True
         return False

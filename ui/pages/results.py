@@ -257,10 +257,11 @@ def _render_scoring(result: PipelineResult, has_winner: bool) -> None:
         st.info("No winning score is available for this run.")
 
     # Candidate Rejection Explanations (when no winner or rejected finalists exist)
-    if not has_winner and result.final_report and result.final_report.evaluations:
+    report = getattr(result, "report", None) or getattr(result, "final_report", None)
+    if not has_winner and report and getattr(report, "evaluations", None):
         st.markdown("### Candidate Rejection & Quality Gate Audit")
         st.caption("Detailed breakdown of why each candidate failed the mandatory quality threshold.")
-        for eval_item in result.final_report.evaluations:
+        for eval_item in report.evaluations:
             with st.expander(f"❌ [{eval_item.candidate_id}] {eval_item.candidate_title} (Score: {eval_item.total_score:.1f}/100)"):
                 failed_gates = [g for g in eval_item.quality_gates if g.status.value in {"failed", "insufficient_evidence"}]
                 if failed_gates:
@@ -509,22 +510,28 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
 
     if mode_a:
         # Mode A: Best Overall Track
-        if comp and comp.overall_winning_candidate and comp.overall_winning_track:
+        if comp and (comp.overall_winner_evaluation or comp.overall_winning_candidate) and comp.overall_winning_track:
             w = comp.overall_winning_candidate
+            ev = comp.overall_winner_evaluation
             t = comp.overall_winning_track
+            cand_title = ev.candidate_title if ev else (w.title if w else "Winner")
+            domain_name = ev.domain if ev else (w.domain if w else "General")
+            score_text = f"{ev.total_score:.1f}/100" if ev else "N/A"
+            gates_passed = ev.all_gates_passed if ev else True
+            assessment = ev.overall_assessment if ev else (w.unique_differentiation if w else "")
             st.markdown(
                 f"""
                 <div class="hiq-winner">
                     <div class="label">Mode A · Best Overall Track Winner</div>
                     <h2>Track: {t.name}</h2>
-                    <h3 style="margin-top: 4px; color: #f1f5f9;">{w.candidate_title}</h3>
+                    <h3 style="margin-top: 4px; color: #f1f5f9;">{cand_title}</h3>
                     <div style="margin-top: 8px;">
-                        {badge(w.domain, "amber")}
-                        {badge(f"{w.total_score:.1f}/100", "ok")}
-                        {badge("all 10 gates passed" if w.all_gates_passed else "gate failure", "ok" if w.all_gates_passed else "bad")}
+                        {badge(domain_name, "amber")}
+                        {badge(score_text, "ok")}
+                        {badge("all 10 gates passed" if gates_passed else "gate failure", "ok" if gates_passed else "bad")}
                         {badge(f"rank #1 across all {len(multi.input.tracks)} tracks")}
                     </div>
-                    <p class="hiq-muted" style="margin-top: 10px;">{w.overall_assessment[:700]}</p>
+                    <p class="hiq-muted" style="margin-top: 10px;">{assessment[:700]}</p>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -542,16 +549,28 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
         cols = st.columns(min(len(multi.input.tracks), 3) or 1)
         for idx, track in enumerate(multi.input.tracks):
             col = cols[idx % len(cols)]
-            winner_item = comp.best_per_track.get(track.id) if comp else None
+            ev = (
+                comp.per_track_evaluations.get(track.id)
+                if (comp and comp.per_track_evaluations)
+                else None
+            )
+            cand = (
+                comp.per_track_winners.get(track.id)
+                if (comp and comp.per_track_winners)
+                else None
+            )
             with col:
                 st.markdown(f"#### {track.name}")
-                if winner_item and winner_item.evaluation:
-                    ev = winner_item.evaluation
+                if ev:
                     st.success(f"**{ev.candidate_title}**")
                     st.caption(
                         f"Score: **{ev.total_score:.1f}/100** · Domain: `{ev.domain}`"
                     )
                     st.markdown(f"*{ev.overall_assessment[:160]}...*")
+                elif cand:
+                    st.success(f"**{cand.title}**")
+                    st.caption(f"Domain: `{cand.domain}`")
+                    st.markdown(f"*{cand.unique_differentiation[:160]}...*")
                 else:
                     st.warning(
                         "**No qualifying problem statement found for this track.**"
@@ -582,15 +601,16 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
     # Runner-up Explanations (Mode A) or Comparative Notes
-    if comp and comp.runner_up_explanations:
+    explanation_text = getattr(comp, "runner_ups_explanation", None) or getattr(comp, "selection_rationale", None)
+    if explanation_text:
         with st.expander(
             "Cross-Track Runner-Up Analysis & Evaluation Rationale", expanded=False
         ):
-            for exp in comp.runner_up_explanations:
-                st.markdown(f"- {exp}")
+            st.markdown(explanation_text)
 
     # Duplicate resolution analysis
-    if comp and comp.duplicate_resolutions:
+    dups = getattr(comp, "duplicate_detections", None) or getattr(comp, "duplicate_resolutions", None)
+    if dups:
         with st.expander(
             "Cross-Track Overlap & Duplicate Deduplication", expanded=False
         ):
@@ -599,18 +619,41 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
                 "to ensure an idea is uniquely awarded to its most appropriate track."
             )
             dup_rows = []
-            for d in comp.duplicate_resolutions:
-                dup_rows.append(
-                    {
-                        "Candidate": d.candidate_title,
-                        "Original Track": d.original_track_name,
-                        "Assigned Track": d.best_fit_track_name,
-                        "Overlaps With": d.overlapping_with_title,
-                        "Similarity": f"{d.similarity_score:.2f}",
-                        "Rationale": d.resolution_rationale,
-                    }
-                )
-            st.dataframe(pd.DataFrame(dup_rows), use_container_width=True, hide_index=True)
+            for d in dups:
+                if isinstance(d, dict):
+                    if "candidate_a_title" in d:
+                        is_b_assigned = d.get("best_fit_track_id") == d.get("track_a_id")
+                        c_title = d.get("candidate_b_title") if is_b_assigned else d.get("candidate_a_title")
+                        orig_tr = d.get("track_b_name") if is_b_assigned else d.get("track_a_name")
+                        ov_title = d.get("candidate_a_title") if is_b_assigned else d.get("candidate_b_title")
+                        dup_rows.append({
+                            "Candidate": c_title,
+                            "Original Track": orig_tr,
+                            "Assigned Track": d.get("best_fit_track_name", ""),
+                            "Overlaps With": ov_title,
+                            "Similarity": f"{float(d.get('similarity_score', 0.0)):.2f}",
+                            "Rationale": d.get("resolution_note", ""),
+                        })
+                    else:
+                        dup_rows.append({
+                            "Candidate": d.get("candidate_title", ""),
+                            "Original Track": d.get("original_track_name", ""),
+                            "Assigned Track": d.get("best_fit_track_name", ""),
+                            "Overlaps With": d.get("overlapping_with_title", ""),
+                            "Similarity": f"{float(d.get('similarity_score', 0.0)):.2f}",
+                            "Rationale": d.get("resolution_rationale", ""),
+                        })
+                else:
+                    dup_rows.append({
+                        "Candidate": getattr(d, "candidate_title", ""),
+                        "Original Track": getattr(d, "original_track_name", ""),
+                        "Assigned Track": getattr(d, "best_fit_track_name", ""),
+                        "Overlaps With": getattr(d, "overlapping_with_title", ""),
+                        "Similarity": f"{getattr(d, 'similarity_score', 0.0):.2f}",
+                        "Rationale": getattr(d, "resolution_rationale", ""),
+                    })
+            if dup_rows:
+                st.dataframe(pd.DataFrame(dup_rows), use_container_width=True, hide_index=True)
 
     # Track-by-track detailed drilldown
     st.markdown("### Track-by-Track Detailed Breakdown")
@@ -627,6 +670,7 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
                     st.error(f"Track execution failed: {track_res.error}")
                     continue
 
+                report_obj = getattr(track_res, "report", None) or getattr(track_res, "track_report", None)
                 t_pipe_result = PipelineResult(
                     session_id=multi.session_id,
                     input=track_res.input,
@@ -635,7 +679,7 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
                     feasibility=track_res.feasibility,
                     debates=track_res.debates or [],
                     winner=track_res.winner,
-                    report=track_res.track_report,
+                    report=report_obj,
                     status=track_res.status,
                 )
                 t_has_winner = bool(

@@ -70,6 +70,8 @@ class CandidateEvaluation(BaseModel):
     debate_recommendation: str = ""
     is_qualified: bool = False
     rank: int | None = None
+    improvement_rounds_attempted: int = 0
+    elimination_reason: str | None = None
 
     @model_validator(mode="before")
     @classmethod

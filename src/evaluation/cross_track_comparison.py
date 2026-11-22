@@ -29,6 +29,16 @@ class CrossTrackComparisonEngine:
 
     DUPLICATE_SIMILARITY_THRESHOLD = 0.58
 
+    _CRITERION_PATTERNS: dict[str, re.Pattern[str]] = {
+        "impact": re.compile(r"problem significance|impact", re.IGNORECASE),
+        "originality": re.compile(r"originality|differentiation", re.IGNORECASE),
+        "feasibility": re.compile(r"feasibility", re.IGNORECASE),
+        "relevance": re.compile(r"relevance|geographic", re.IGNORECASE),
+        "organizer": re.compile(r"organizer|judging", re.IGNORECASE),
+        "evidence": re.compile(r"evidence|credibility", re.IGNORECASE),
+        "demo": re.compile(r"demo|hero flow", re.IGNORECASE),
+    }
+
     def __init__(self, similarity_threshold: float = DUPLICATE_SIMILARITY_THRESHOLD) -> None:
         self.similarity_threshold = similarity_threshold
 
@@ -41,15 +51,19 @@ class CrossTrackComparisonEngine:
         }
         return set(words) - stopwords
 
-    def compute_similarity(self, text_a: str, text_b: str) -> float:
-        """Calculate token-based Jaccard similarity between two texts."""
-        set_a = self._tokenize(text_a)
-        set_b = self._tokenize(text_b)
+    @staticmethod
+    def _token_jaccard(set_a: set[str], set_b: set[str]) -> float:
         if not set_a or not set_b:
             return 0.0
         intersection = len(set_a & set_b)
         union = len(set_a | set_b)
         return round(intersection / union, 3)
+
+    def compute_similarity(self, text_a: str, text_b: str) -> float:
+        """Calculate token-based Jaccard similarity between two texts."""
+        set_a = self._tokenize(text_a)
+        set_b = self._tokenize(text_b)
+        return self._token_jaccard(set_a, set_b)
 
     def detect_cross_track_duplicates(
         self,
@@ -58,27 +72,40 @@ class CrossTrackComparisonEngine:
         """Identify duplicate or near-duplicate candidates submitted across different tracks."""
         duplicates: list[dict[str, Any]] = []
         n = len(candidate_items)
+        if n < 2:
+            return duplicates
+
+        # Precompute candidate tokens once: O(N) tokenizations instead of O(N^2)
+        cand_tokens = [
+            self._tokenize(f"{c.problem_statement} {c.proposed_solution} {c.unique_differentiation}")
+            for _, c, _ in candidate_items
+        ]
+
+        # Precompute track tokens for unique tracks
+        track_tokens: dict[str, set[str]] = {}
+        for t, _, _ in candidate_items:
+            if t.id not in track_tokens:
+                track_tokens[t.id] = self._tokenize(f"{t.name} {t.description}")
 
         for i in range(n):
             track_a, cand_a, eval_a = candidate_items[i]
-            text_a = f"{cand_a.problem_statement} {cand_a.proposed_solution} {cand_a.unique_differentiation}"
-            tokens_a = self._tokenize(text_a)
+            tokens_a = cand_tokens[i]
 
             for j in range(i + 1, n):
                 track_b, cand_b, eval_b = candidate_items[j]
                 if track_a.id == track_b.id:
                     continue  # Only compare across distinct tracks
 
-                text_b = f"{cand_b.problem_statement} {cand_b.proposed_solution} {cand_b.unique_differentiation}"
-                sim = self.compute_similarity(text_a, text_b)
+                tokens_b = cand_tokens[j]
+                sim = self._token_jaccard(tokens_a, tokens_b)
 
                 if sim >= self.similarity_threshold:
                     # Determine best fit track based on track name/description overlap
-                    track_tokens_a = self._tokenize(f"{track_a.name} {track_a.description}")
-                    track_tokens_b = self._tokenize(f"{track_b.name} {track_b.description}")
+                    track_toks_a = track_tokens.get(track_a.id) or self._tokenize(f"{track_a.name} {track_a.description}")
+                    track_toks_b = track_tokens.get(track_b.id) or self._tokenize(f"{track_b.name} {track_b.description}")
 
-                    overlap_a = len(tokens_a & track_tokens_a)
-                    overlap_b = len(tokens_a & track_tokens_b)
+                    overlap_a = len(tokens_a & track_toks_a)
+                    overlap_b = len(tokens_a & track_toks_b)
 
                     best_fit_track = track_a if overlap_a >= overlap_b else track_b
 
@@ -102,9 +129,12 @@ class CrossTrackComparisonEngine:
 
         return duplicates
 
-    def _extract_criterion_score(self, evaluation: CandidateEvaluation, pattern: str) -> float:
+    def _extract_criterion_score(self, evaluation: CandidateEvaluation, pattern_or_key: str) -> float:
+        compiled = self._CRITERION_PATTERNS.get(pattern_or_key)
+        if compiled is None:
+            compiled = re.compile(pattern_or_key, re.IGNORECASE)
         for s in evaluation.scores:
-            if re.search(pattern, s.name, re.IGNORECASE):
+            if compiled.search(s.name):
                 return s.score
         return 0.0
 
@@ -170,13 +200,13 @@ class CrossTrackComparisonEngine:
                 is_duplicate=is_dup,
                 best_fit_track_name=best_fit_map.get(cand_key, track.name),
                 rank_in_track=ev.rank,
-                impact_score=self._extract_criterion_score(ev, r"problem significance|impact"),
-                originality_score=self._extract_criterion_score(ev, r"originality|differentiation"),
-                feasibility_score=self._extract_criterion_score(ev, r"feasibility"),
-                relevance_score=self._extract_criterion_score(ev, r"relevance|geographic"),
-                organizer_alignment_score=self._extract_criterion_score(ev, r"organizer|judging"),
-                evidence_strength_score=self._extract_criterion_score(ev, r"evidence|credibility"),
-                demo_potential_score=self._extract_criterion_score(ev, r"demo|hero flow"),
+                impact_score=self._extract_criterion_score(ev, "impact"),
+                originality_score=self._extract_criterion_score(ev, "originality"),
+                feasibility_score=self._extract_criterion_score(ev, "feasibility"),
+                relevance_score=self._extract_criterion_score(ev, "relevance"),
+                organizer_alignment_score=self._extract_criterion_score(ev, "organizer"),
+                evidence_strength_score=self._extract_criterion_score(ev, "evidence"),
+                demo_potential_score=self._extract_criterion_score(ev, "demo"),
                 summary_justification=ev.overall_assessment or cand.unique_differentiation[:160],
                 proposed_solution_preview=cand.proposed_solution[:200],
                 unique_differentiation=cand.unique_differentiation[:200],

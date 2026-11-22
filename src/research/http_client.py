@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +63,9 @@ class ResearchHttpClient:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._last_request: dict[str, float] = {}
         self._robots: dict[str, RobotFileParser | None] = {}
+        self._mem_cache: dict[str, CachedResponse] = {}
+        self._mem_cache_max_size: int = 1024
+        self._cache_lock = threading.Lock()
         self._client = httpx.Client(
             timeout=httpx.Timeout(self.settings.timeout_seconds, connect=10.0),
             headers={
@@ -81,19 +85,38 @@ class ResearchHttpClient:
         return self.cache_dir / f"{digest}.json"
 
     def _read_cache(self, url: str, ttl_hours: int) -> CachedResponse | None:
+        now = time.time()
+        # Fast path: in-memory cache lookup
+        with self._cache_lock:
+            cached = self._mem_cache.get(url)
+            if cached is not None:
+                if now - cached.stored_at <= ttl_hours * 3600:
+                    return cached
+                self._mem_cache.pop(url, None)
+
+        # Persistent disk cache lookup
         path = self._cache_path(url)
         if not path.exists():
             return None
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
             stored_at = float(payload["stored_at"])
-            if time.time() - stored_at > ttl_hours * 3600:
+            if now - stored_at > ttl_hours * 3600:
                 return None
-            return CachedResponse(**payload)
+            cached = CachedResponse(**payload)
+            with self._cache_lock:
+                if len(self._mem_cache) >= self._mem_cache_max_size:
+                    self._mem_cache.pop(next(iter(self._mem_cache)), None)
+                self._mem_cache[url] = cached
+            return cached
         except (OSError, ValueError, KeyError, TypeError):
             return None
 
     def _write_cache(self, cached: CachedResponse) -> None:
+        with self._cache_lock:
+            if len(self._mem_cache) >= self._mem_cache_max_size:
+                self._mem_cache.pop(next(iter(self._mem_cache)), None)
+            self._mem_cache[cached.url] = cached
         try:
             self._cache_path(cached.url).write_text(
                 json.dumps(cached.__dict__, ensure_ascii=False), encoding="utf-8"

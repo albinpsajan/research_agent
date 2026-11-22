@@ -161,9 +161,35 @@ def load_multi_track_result(
         except Exception:
             pass
 
-    # Reconstruct individual track results
+    # Reconstruct individual track results from sequential agent_results
+    rows = repository.db.fetch_all(
+        "SELECT agent_name, result_type, result_data FROM agent_results WHERE session_id=? ORDER BY id",
+        (session_id,),
+    )
+    track_agent_data: dict[str, dict[str, Any]] = {track.id: {} for track in tracks}
+    current_chunk: dict[str, Any] = {}
+    for row in rows:
+        r = dict(row)
+        aname = r.get("agent_name", "")
+        rtype = r.get("result_type", "")
+        rdata = json.loads(r["result_data"]) if r.get("result_data") else {}
+        if aname.startswith("track_") and rtype == "track_summary":
+            tid = aname[6:]
+            if tid in track_agent_data:
+                track_agent_data[tid] = dict(current_chunk)
+            current_chunk = {}
+        elif rtype in {"domain_map", "innovation_report", "feasibility_report", "final_evaluation"}:
+            current_chunk[rtype] = rdata
+
     track_results: dict[str, TrackResult] = {}
     for track in tracks:
+        t_data = track_agent_data.get(track.id, {})
+        d_map = _model(DomainMap, t_data.get("domain_map"))
+        i_rep = _model(InnovationReport, t_data.get("innovation_report"))
+        f_rep = _model(FeasibilityReport, t_data.get("feasibility_report"))
+        final_eval = _model(FinalEvaluationReport, t_data.get("final_evaluation"))
+        w_sel = final_eval.winner if final_eval else None
+
         track_input = HackathonInput(
             theme=f"{hackathon.theme} — Track: {track.name}",
             name=hackathon.name,
@@ -176,6 +202,11 @@ def load_multi_track_result(
         track_results[track.id] = TrackResult(
             track=track,
             input=track_input,
+            domain_map=d_map,
+            innovation_report=i_rep,
+            feasibility=f_rep,
+            debates=final_eval.debates if final_eval else [],
+            winner=w_sel,
             status="completed",
         )
 
@@ -194,7 +225,30 @@ def load_multi_track_result(
             res.started_at = datetime.fromisoformat(str(session["created_at"]))
         except ValueError:
             pass
-    res.completed_at = res.started_at
+
+    latest_ts = None
+    rep_row = repository.db.fetch_one(
+        "SELECT MAX(created_at) as max_t FROM final_reports WHERE session_id=?",
+        (session_id,),
+    )
+    if rep_row and rep_row["max_t"]:
+        latest_ts = rep_row["max_t"]
+    else:
+        ar_row = repository.db.fetch_one(
+            "SELECT MAX(created_at) as max_t FROM agent_results WHERE session_id=?",
+            (session_id,),
+        )
+        if ar_row and ar_row["max_t"]:
+            latest_ts = ar_row["max_t"]
+
+    if latest_ts:
+        try:
+            res.completed_at = datetime.fromisoformat(str(latest_ts))
+            res.duration_seconds = max(0.0, (res.completed_at - res.started_at).total_seconds())
+        except ValueError:
+            res.completed_at = res.started_at
+    else:
+        res.completed_at = res.started_at
     return res
 
 

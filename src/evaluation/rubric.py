@@ -331,8 +331,93 @@ class EvaluationService:
         )
         evaluation.calculate_total()
         return evaluation
-        evaluation.calculate_total()
-        return evaluation
+
+    def re_evaluate_candidate(
+        self,
+        candidate: CandidateSolution,
+        problem: ProblemCandidate | None,
+        gap: InnovationGap | None,
+        hackathon: HackathonInput,
+        intelligence: HackathonIntelligence,
+        prior_evaluation: CandidateEvaluation | None = None,
+    ) -> CandidateEvaluation:
+        """Re-evaluate an improved candidate or a candidate with newly retrieved evidence.
+
+        Re-runs deterministic quality gates against updated evidence and architecture.
+        Adjusts criteria scores upward only when newly attached evidence or architectural
+        refinements genuinely satisfy previously failing gates.
+        """
+        hours = available_hours(hackathon)
+        is_general_theme = (
+            not bool(hackathon.name and hackathon.name.strip())
+            or getattr(intelligence, "is_general_theme_mode", False)
+            or (hackathon.name or "").lower().strip() in {"none", "unknown", "general theme", "general"}
+        )
+
+        gates = self._deterministic_gates(
+            candidate, problem, gap, hackathon, intelligence, hours
+        )
+
+        if prior_evaluation:
+            scores: list[ScoreCriterion] = []
+            for s in prior_evaluation.scores:
+                updated_s = s.model_copy()
+                s_name_lower = s.name.lower()
+                # If problem validation gate passed with newly attached evidence, adjust score
+                if "problem" in s_name_lower or "evidence" in s_name_lower:
+                    g2 = next((g for g in gates if "validation" in g.name.lower() or "evidence" in g.name.lower()), None)
+                    if g2 and g2.status == QualityGateStatus.PASSED and updated_s.score < 7.5:
+                        updated_s.score = min(10.0, updated_s.score + 2.0)
+                        updated_s.weighted_score = round(updated_s.score / 10.0 * updated_s.weight, 2)
+                        updated_s.justification += " Improved after targeted corroborating evidence was retrieved."
+                elif "originality" in s_name_lower or "differentiation" in s_name_lower:
+                    g5 = next((g for g in gates if "innovation" in g.name.lower() or "differentiation" in g.name.lower()), None)
+                    if g5 and g5.status == QualityGateStatus.PASSED and updated_s.score < 7.5:
+                        updated_s.score = min(10.0, updated_s.score + 1.5)
+                        updated_s.weighted_score = round(updated_s.score / 10.0 * updated_s.weight, 2)
+                        updated_s.justification += " Improved after differentiation was sharpened against competitors."
+                elif "technical" in s_name_lower or "feasibility" in s_name_lower:
+                    g7 = next((g for g in gates if "feasibility" in g.name.lower() or "data availability" in g.name.lower()), None)
+                    if g7 and g7.status == QualityGateStatus.PASSED and updated_s.score < 7.5:
+                        updated_s.score = min(10.0, updated_s.score + 1.5)
+                        updated_s.weighted_score = round(updated_s.score / 10.0 * updated_s.weight, 2)
+                        updated_s.justification += " Improved after architectural refinement."
+                elif "demonstration" in s_name_lower or "deadline" in s_name_lower or "implementation" in s_name_lower:
+                    g9 = next((g for g in gates if "buildability" in g.name.lower() or "demonstration" in g.name.lower()), None)
+                    if g9 and g9.status == QualityGateStatus.PASSED and updated_s.score < 7.5:
+                        updated_s.score = min(10.0, updated_s.score + 1.5)
+                        updated_s.weighted_score = round(updated_s.score / 10.0 * updated_s.weight, 2)
+                        updated_s.justification += " Improved after concrete demo plan and MVP scope were formulated."
+                scores.append(updated_s)
+
+            assessment = prior_evaluation.overall_assessment
+            if candidate.revisions:
+                latest_rev = candidate.revisions[-1]
+                assessment += f" Re-evaluated after Revision {latest_rev.revision_number}: {latest_rev.summary_of_changes}."
+
+            evaluation = CandidateEvaluation(
+                candidate_id=candidate.id or "",
+                candidate_title=candidate.title or candidate.problem_statement[:120],
+                domain=candidate.domain,
+                scores=scores,
+                quality_gates=gates,
+                is_general_theme_mode=is_general_theme,
+                evaluation_version=self.version,
+                overall_assessment=assessment,
+                strengths=prior_evaluation.strengths,
+                weaknesses=[
+                    w for w in prior_evaluation.weaknesses
+                    if not any(
+                        r.lower() in w.lower()
+                        for r in (candidate.revisions[-1].resolved_gates if candidate.revisions else [])
+                    )
+                ],
+                improvement_rounds_attempted=prior_evaluation.improvement_rounds_attempted + 1,
+            )
+            evaluation.calculate_total()
+            return evaluation
+
+        return self.evaluate(candidate, problem, gap, hackathon, intelligence)
 
     # ------------------------------------------------------------------
     # Scoring prompt

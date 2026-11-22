@@ -30,6 +30,20 @@ class RiskAssessment(BaseModel):
     mitigation: str | None = None
 
 
+class SolutionRevision(BaseModel):
+    """A record of an architectural refinement or improvement made to a candidate."""
+
+    revision_number: int
+    timestamp: datetime = Field(default_factory=utc_now)
+    summary_of_changes: str
+    addressed_criticisms: list[str] = Field(default_factory=list)
+    previous_gate_failures: list[str] = Field(default_factory=list)
+    improved_technical_architecture: str | None = None
+    improved_demo_plan: str | None = None
+    improved_differentiation: str | None = None
+    resolved_gates: list[str] = Field(default_factory=list)
+
+
 class CandidateSolution(BaseModel):
     """A refined candidate solution with feasibility analysis."""
 
@@ -84,6 +98,16 @@ class CandidateSolution(BaseModel):
     evidence_confidence: float = Field(default=0.5, ge=0, le=1)
     failure_categories: list[str] = Field(default_factory=list)
     validation_notes: list[str] = Field(default_factory=list)
+    revisions: list[SolutionRevision] = Field(default_factory=list)
+    competing_approaches: list[str] = Field(default_factory=list)
+    elimination_reason: str | None = None
+    improvement_attempted: bool = False
+    final_disposition: str = "pending"  # "winner", "shortlisted", "improved", "eliminated"
+
+    @property
+    def candidate_title(self) -> str:
+        """Alias property matching CandidateEvaluation interface."""
+        return self.title
 
 
 class FeasibilityReport(BaseModel):

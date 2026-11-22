@@ -135,13 +135,19 @@ def word_tokens(text: str) -> set[str]:
     return {token for token in re.findall(r"[a-z0-9]{4,}", (text or "").lower())}
 
 
-def similarity(left: str, right: str) -> float:
-    """Jaccard similarity with light prefix stemming for duplicate detection."""
-    a = {token[:4] for token in word_tokens(left)}
-    b = {token[:4] for token in word_tokens(right)}
+def stem_tokens(text: str) -> set[str]:
+    return {token[:4] for token in word_tokens(text)}
+
+
+def token_similarity(a: set[str], b: set[str]) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
+
+
+def similarity(left: str, right: str) -> float:
+    """Jaccard similarity with light prefix stemming for duplicate detection."""
+    return token_similarity(stem_tokens(left), stem_tokens(right))
 
 
 class BaseAgent:

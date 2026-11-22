@@ -217,3 +217,11 @@ def format_datetime(value) -> str:
         return value.strftime("%Y-%m-%d %H:%M")
     except AttributeError:
         return str(value)[:19]
+
+
+def navigate_to(page_name: str) -> None:
+    """Safely queue page navigation without modifying locked widget state directly."""
+    import streamlit as st
+
+    st.session_state["target_nav"] = page_name
+    st.rerun()

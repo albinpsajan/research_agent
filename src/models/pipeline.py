@@ -58,6 +58,11 @@ class PipelineResult(BaseModel):
     completed_at: datetime | None = None
     duration_seconds: float = 0.0
 
+    @property
+    def final_report(self) -> FinalReport | None:
+        """Alias property matching UI references."""
+        return self.report
+
     def finalize(self) -> None:
         self.completed_at = utc_now()
         self.duration_seconds = (self.completed_at - self.started_at).total_seconds()

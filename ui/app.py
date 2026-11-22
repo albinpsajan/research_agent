@@ -48,6 +48,10 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
+    if "target_nav" in st.session_state:
+        target = st.session_state.pop("target_nav")
+        if target in PAGES:
+            st.session_state["nav_choice"] = target
     choice = st.radio("Navigation", list(PAGES), key="nav_choice", label_visibility="collapsed")
     st.divider()
 

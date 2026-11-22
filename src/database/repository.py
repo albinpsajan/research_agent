@@ -250,13 +250,53 @@ class Repository:
                     reliability,
                 ),
             )
-            if cursor.lastrowid:
+            if cursor.rowcount > 0 and cursor.lastrowid:
                 return int(cursor.lastrowid)
             row = conn.execute(
                 "SELECT id FROM research_sources WHERE session_id IS ? AND url=?",
                 (session_id, url),
             ).fetchone()
             return int(row["id"]) if row else 0
+
+    def save_research_sources_batch(
+        self,
+        session_id: str | None,
+        sources: list[dict[str, Any]],
+    ) -> list[int]:
+        """Save multiple research sources in a single atomic transaction. Returns source IDs."""
+        if not sources:
+            return []
+        ids: list[int] = []
+        with self.db.transaction() as conn:
+            for s in sources:
+                url = s.get("url")
+                if not url:
+                    continue
+                metadata = s.get("metadata")
+                cursor = conn.execute(
+                    """INSERT OR IGNORE INTO research_sources
+                       (session_id, url, title, source_type, description, metadata_json,
+                        reliability)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        session_id,
+                        url,
+                        s.get("title", ""),
+                        s.get("source_type", "research"),
+                        s.get("description"),
+                        json.dumps(metadata) if metadata else None,
+                        float(s.get("reliability", 0.5)),
+                    ),
+                )
+                if cursor.rowcount > 0 and cursor.lastrowid:
+                    ids.append(int(cursor.lastrowid))
+                else:
+                    row = conn.execute(
+                        "SELECT id FROM research_sources WHERE session_id IS ? AND url=?",
+                        (session_id, url),
+                    ).fetchone()
+                    ids.append(int(row["id"]) if row else 0)
+        return ids
 
     def get_research_sources(self, session_id: str) -> list[dict]:
         """Get all research sources for a session."""

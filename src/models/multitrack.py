@@ -41,6 +41,34 @@ class TrackResult(BaseModel):
     error: str | None = None
     duration_seconds: float = 0.0
 
+    @property
+    def track_report(self) -> FinalReport | None:
+        """Alias property matching UI expectations."""
+        return self.report
+
+
+class BestTrackWinnerItem(BaseModel):
+    """Unified representation of a track's best candidate solution and evaluation."""
+
+    candidate: CandidateSolution | None = None
+    evaluation: CandidateEvaluation | None = None
+
+    @property
+    def has_winner(self) -> bool:
+        return self.candidate is not None and self.evaluation is not None
+
+    @property
+    def candidate_title(self) -> str:
+        if self.evaluation and self.evaluation.candidate_title:
+            return self.evaluation.candidate_title
+        if self.candidate and self.candidate.title:
+            return self.candidate.title
+        return ""
+
+    @property
+    def total_score(self) -> float:
+        return self.evaluation.total_score if self.evaluation else 0.0
+
 
 class CrossTrackComparisonItem(BaseModel):
     """Standardized representation of a candidate for cross-track ranking and comparison."""
@@ -97,6 +125,52 @@ class CrossTrackComparisonResult(BaseModel):
     runner_ups_explanation: str = ""
     duplicate_detections: list[dict[str, Any]] = Field(default_factory=list)
     compared_at: datetime = Field(default_factory=utc_now)
+
+    @property
+    def best_per_track(self) -> dict[str, BestTrackWinnerItem]:
+        """Accessor mapping track_id -> BestTrackWinnerItem for Mode B results."""
+        result: dict[str, BestTrackWinnerItem] = {}
+        all_track_ids = set(self.per_track_winners.keys()) | set(self.per_track_evaluations.keys())
+        for tid in all_track_ids:
+            cand = self.per_track_winners.get(tid)
+            ev = self.per_track_evaluations.get(tid)
+            result[tid] = BestTrackWinnerItem(candidate=cand, evaluation=ev)
+        return result
+
+    @property
+    def runner_up_explanations(self) -> list[str]:
+        """Accessor returning runner-up explanation lines as a list."""
+        if not self.runner_ups_explanation:
+            return []
+        return [
+            line.strip("- ").strip()
+            for line in self.runner_ups_explanation.splitlines()
+            if line.strip()
+        ]
+
+    @property
+    def duplicate_resolutions(self) -> list[dict[str, Any]]:
+        """Normalized duplicate resolutions list for UI presentation."""
+        resolutions = []
+        for d in self.duplicate_detections:
+            cand_a = d.get("candidate_a_title", "")
+            cand_b = d.get("candidate_b_title", "")
+            track_a = d.get("track_a_name", "")
+            track_b = d.get("track_b_name", "")
+            best_track = d.get("best_fit_track_name", "")
+            orig_track = track_b if best_track == track_a else track_a
+            cand = cand_b if best_track == track_a else cand_a
+            overlaps = cand_a if best_track == track_a else cand_b
+
+            resolutions.append({
+                "candidate_title": cand,
+                "original_track_name": orig_track,
+                "best_fit_track_name": best_track,
+                "overlapping_with_title": overlaps,
+                "similarity_score": float(d.get("similarity_score", 0.0)),
+                "resolution_rationale": d.get("resolution_note", ""),
+            })
+        return resolutions
 
 
 class MultiTrackPipelineResult(BaseModel):

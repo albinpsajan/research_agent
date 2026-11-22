@@ -151,8 +151,23 @@ class ConnectorRegistry:
         max_results: int = 30,
     ) -> SearchBundle:
         combined = SearchBundle(query="; ".join(queries))
-        for query in queries:
-            combined.extend(self.search(query, source_types=source_types, limit=limit))
+        if not queries:
+            return combined
+        if len(queries) == 1:
+            combined.extend(self.search(queries[0], source_types=source_types, limit=limit))
+        else:
+            max_workers = min(4, len(queries))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(self.search, q, source_types=source_types, limit=limit)
+                    for q in queries
+                ]
+                for fut in futures:
+                    try:
+                        bundle = fut.result()
+                        combined.extend(bundle)
+                    except Exception as exc:
+                        logger.warning("Parallel search subquery failed: %s", exc)
         combined.dedupe()
         combined.results = combined.results[:max_results]
         return combined
@@ -184,6 +199,22 @@ class ResearchService:
             reliability=result.reliability,
         )
 
+    def record_sources(self, session_id: str | None, results: Iterable[SearchResult]) -> None:
+        batch = [
+            {
+                "url": r.url,
+                "title": r.title,
+                "source_type": r.source_type,
+                "description": r.snippet[:1500],
+                "metadata": r.metadata,
+                "reliability": r.reliability,
+            }
+            for r in results
+            if getattr(r, "url", None)
+        ]
+        if batch:
+            self.repository.save_research_sources_batch(session_id, batch)
+
     def search(
         self,
         session_id: str | None,
@@ -197,8 +228,7 @@ class ResearchService:
             source_types=source_types,
             limit=limit or self.settings.agent.research_results_per_query,
         )
-        for result in bundle.results:
-            self.record_source(session_id, result)
+        self.record_sources(session_id, bundle.results)
         return bundle
 
     def multi_search(
@@ -216,8 +246,7 @@ class ResearchService:
             limit=limit,
             max_results=max_results,
         )
-        for result in bundle.results:
-            self.record_source(session_id, result)
+        self.record_sources(session_id, bundle.results)
         return bundle
 
     def fetch_page(self, session_id: str | None, url: str) -> PageContent:

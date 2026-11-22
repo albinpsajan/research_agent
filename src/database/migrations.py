@@ -127,6 +127,22 @@ MIGRATIONS: tuple[Migration, ...] = (
         );
         """,
     ),
+    Migration(
+        5,
+        "Performance optimization indexes",
+        """
+        CREATE INDEX IF NOT EXISTS idx_uploaded_docs_active_session
+            ON uploaded_documents(is_active, session_id);
+        CREATE INDEX IF NOT EXISTS idx_evaluations_session_score
+            ON evaluations(session_id, total_score DESC);
+        CREATE INDEX IF NOT EXISTS idx_sessions_status
+            ON sessions(status);
+        CREATE INDEX IF NOT EXISTS idx_problem_candidates_session
+            ON problem_candidates(session_id);
+        CREATE INDEX IF NOT EXISTS idx_candidate_solutions_session
+            ON candidate_solutions(session_id);
+        """,
+    ),
 )
 
 

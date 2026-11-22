@@ -35,20 +35,73 @@ def _quote(text: str | None, limit: int = 2500) -> str:
     return (text or "").strip()[:limit] or "_Not recorded._"
 
 
-def _evaluation_table(evaluations: list[CandidateEvaluation]) -> str:
+def _evaluation_table(
+    evaluations: list[CandidateEvaluation],
+    candidates: list[CandidateSolution] | None = None,
+) -> str:
     if not evaluations:
         return "_No candidates were evaluated._"
     lines = [
-        "| Rank | Candidate | Domain | Score | Gates | Debate |",
-        "|---:|---|---|---:|---|---|",
+        "### Finalist Evaluation & Qualification Status",
+        "",
+        "| Rank | Candidate | Domain | Score | Gates | Debate | Disposition |",
+        "|---:|---|---|---:|---|---|---|",
     ]
+    cand_by_id = {c.id: c for c in (candidates or [])}
     for evaluation in sorted(evaluations, key=lambda e: e.total_score, reverse=True):
         gates = "PASS" if evaluation.all_gates_passed else "FAIL"
+        c = cand_by_id.get(evaluation.candidate_id)
+        disp = (c.final_disposition.upper() if c else ("QUALIFIED" if evaluation.is_qualified else "ELIMINATED"))
         lines.append(
-            f"| {evaluation.rank or '-'} | {evaluation.candidate_title[:70]} | "
+            f"| {evaluation.rank or '-'} | {evaluation.candidate_title[:60]} | "
             f"{evaluation.domain} | {evaluation.total_score:.1f} | {gates} | "
-            f"{evaluation.debate_recommendation or '-'} |"
+            f"{evaluation.debate_recommendation or '-'} | {disp} |"
         )
+
+    # 2. Candidate Improvement & Revision History
+    revisions_found = False
+    rev_lines = [
+        "",
+        "### Candidate Improvement & Revision History",
+        "",
+        "| Candidate | Rev # | Summary of Changes | Addressed Criticisms | Resolved Gates |",
+        "|---|:---:|---|---|---|",
+    ]
+    for c in (candidates or []):
+        if c.revisions:
+            revisions_found = True
+            for r in c.revisions:
+                criticisms_str = "; ".join(r.addressed_criticisms[:2]) if r.addressed_criticisms else "Initial refinement"
+                resolved_str = ", ".join(r.resolved_gates[:2]) if r.resolved_gates else "Enhanced specification"
+                rev_lines.append(
+                    f"| {c.title[:45]} | Rev {r.revision_number} | {r.summary_of_changes[:60]} | {criticisms_str[:60]} | {resolved_str[:40]} |"
+                )
+    if revisions_found:
+        lines.extend(rev_lines)
+
+    # 3. Intelligent Elimination Audit Table
+    elim_lines = [
+        "",
+        "### Intelligent Candidate Elimination Audit",
+        "",
+        "| Candidate | Original Problem | Gate Outcome | Improved? | Elimination Rationale |",
+        "|---|---|:---:|:---:|---|",
+    ]
+    elim_found = False
+    for evaluation in evaluations:
+        if not evaluation.is_qualified:
+            elim_found = True
+            c = cand_by_id.get(evaluation.candidate_id)
+            prob_title = c.problem_statement[:50] if c else "Problem statement"
+            failing_gates = [g.name for g in evaluation.quality_gates if g.status.value != "passed" and g.status.value != "not_applicable"]
+            reason = (c.elimination_reason if c and c.elimination_reason else evaluation.elimination_reason) or (failing_gates[0] if failing_gates else "Did not meet score or gate thresholds")
+            attempted = "Yes" if (c and c.improvement_attempted) or evaluation.improvement_rounds_attempted > 0 else "No"
+            elim_lines.append(
+                f"| {evaluation.candidate_title[:45]} | {prob_title} | {len(failing_gates)} Gate(s) Unmet | {attempted} | {reason[:80]} |"
+            )
+    if elim_found:
+        lines.extend(elim_lines)
+
     return "\n".join(lines)
 
 
@@ -182,8 +235,8 @@ class ReportGenerator:
         sections.append(
             ReportSection(
                 number=9,
-                title="Candidate comparison",
-                content=_evaluation_table(evaluations),
+                title="Candidate comparison and elimination audit",
+                content=_evaluation_table(evaluations, feasibility.candidates if feasibility else []),
             )
         )
         sections.append(
@@ -240,7 +293,7 @@ class ReportGenerator:
         sections.append(
             ReportSection(
                 number=16,
-                title="Technical feasibility",
+                title="Technical feasibility and implementation blueprint",
                 content=self._feasibility_section(winner_solution),
             )
         )
@@ -675,13 +728,24 @@ class ReportGenerator:
             if solution.feasibility_score is not None
             else "not scored"
         )
+        competing = ""
+        if solution.competing_approaches:
+            competing = "\n\n**Competing Architectural Angles Evaluated:**\n" + "\n".join(f"- {a}" for a in solution.competing_approaches)
+
         return (
             f"**Development complexity:** {solution.development_complexity}\n\n"
             f"**Estimated build time:** {hours_str}\n\n"
             f"**Feasibility score:** {feasibility_str}\n\n"
             f"**Estimated cost:** {solution.estimated_cost}\n\n"
-            f"**Infrastructure:** {', '.join(solution.infrastructure_requirements) or 'not specified'}\n\n"
-            f"**Dependencies:** {', '.join(solution.dependencies) or 'not specified'}"
+            f"**Infrastructure:** {', '.join(solution.infrastructure_requirements) or 'Standard workstation / laptop'}\n\n"
+            f"**Dependencies:** {', '.join(solution.dependencies) or 'Open-source Python / TypeScript stack'}"
+            f"{competing}\n\n"
+            "### Recommended 36-Hour Hackathon Build Schedule\n"
+            "- **Phase 1 (Hours 0–8): Scaffolding & Data Pipeline** — Ingest data/APIs, setup offline database & repositories, build mock fixtures.\n"
+            "- **Phase 2 (Hours 8–20): Core Engine & Processing** — Implement core algorithmic logic, feature extractors, and rule/model pipeline.\n"
+            "- **Phase 3 (Hours 20–30): User Experience & Interactive Dashboard** — Connect Streamlit/Web UI, add visual evidence displays, run offline tests.\n"
+            "- **Phase 4 (Hours 30–36): Live Demo Hardening & Rehearsal** — Prepare 3-minute pitch, record backup fallback video, test judge Q&A edge cases.\n\n"
+            f"### 3-Minute Live Judging Demo Plan\n{_quote(solution.hackathon_demo_plan, 2500)}"
         )
 
     @staticmethod

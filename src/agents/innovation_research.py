@@ -263,6 +263,80 @@ Requirements:
         self._save(session_id, "innovation_report", report)
         return report
 
+    def targeted_research_for_gate(
+        self,
+        session_id: str,
+        problem: ProblemCandidate,
+        gap: InnovationGap | None,
+        failing_gate_name: str,
+        specific_query: str = "",
+    ) -> list[SearchResult]:
+        """Perform targeted precision retrieval to resolve an INSUFFICIENT_EVIDENCE gate.
+
+        Retrieves high-credibility academic papers, open-source repositories, or
+        regional datasets, and directly injects them into the problem's evidence pool.
+        """
+        queries: list[str] = []
+        if specific_query.strip():
+            queries.append(specific_query.strip())
+
+        gate_lower = failing_gate_name.lower()
+        if "evidence" in gate_lower or "validation" in gate_lower or "problem" in gate_lower:
+            queries.extend([
+                f"{problem.title} {problem.domain} research study",
+                f"{problem.title} statistics data impact",
+                f"{problem.domain} {problem.subdomain or ''} challenges",
+            ])
+        elif "existing" in gate_lower or "competitor" in gate_lower or "investigation" in gate_lower:
+            queries.extend([
+                f"{problem.title} open source github",
+                f"{problem.domain} software tool repository",
+                f"{problem.title} existing solutions alternatives",
+            ])
+        else:
+            queries.extend([
+                f"{problem.title} {problem.domain}",
+                f"{problem.domain} {failing_gate_name}",
+            ])
+
+        bundle = self.research.multi_search(
+            session_id,
+            queries[:3],
+            source_types=["github", "openalex", "crossref", "arxiv", "rss"],
+            limit=4,
+            max_results=12,
+        )
+
+        # Check uploaded document intelligence for relevant domain hits
+        doc_service = DocumentIntelligenceService(self.repository, self.llm)
+        doc_hits = doc_service.search_evidence(
+            query=f"{problem.title} {problem.domain} {failing_gate_name}",
+            session_id=session_id,
+            limit=3,
+        )
+        for h in doc_hits:
+            bundle.results.insert(
+                0,
+                SearchResult(
+                    title=f"Uploaded Document: {h.filename} (Page {h.page_number})",
+                    url=h.citation,
+                    snippet=h.text_content[:700],
+                    source_type="uploaded_document",
+                    reliability=0.95,
+                ),
+            )
+        bundle.dedupe()
+
+        # Ingest directly into problem candidate evidence
+        new_evidence = EvidenceAggregator.aggregate_problem_evidence(
+            problem, bundle.results, min_sources=3, max_sources=8
+        )
+        logger.info(
+            "Targeted research for gate '%s' yielded %d evidence items for problem '%s'",
+            failing_gate_name, len(new_evidence), problem.title,
+        )
+        return bundle.results
+
 
 def _pub_category(value: str) -> PublicationCategory:
     try:

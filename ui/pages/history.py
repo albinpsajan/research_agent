@@ -7,7 +7,7 @@ import streamlit as st
 
 from src.models.pipeline import PipelineResult
 from src.orchestration.loader import load_multi_track_result, load_session_result
-from ui.components.common import format_datetime, get_repository, hero
+from ui.components.common import format_datetime, get_repository, hero, navigate_to
 
 
 def render() -> None:
@@ -86,8 +86,7 @@ def render() -> None:
                     completed_at=multi_res.completed_at,
                     duration_seconds=multi_res.duration_seconds,
                 )
-                st.session_state["nav_choice"] = "Results"
-                st.rerun()
+                navigate_to("Results")
             else:
                 st.error("Could not reconstruct multi-track session.")
         else:
@@ -98,8 +97,7 @@ def render() -> None:
             else:
                 st.session_state["current_result"] = result
                 st.session_state["current_session_id"] = session_id
-                st.session_state["nav_choice"] = "Results"
-                st.rerun()
+                navigate_to("Results")
 
     reports = repository.get_session_reports(session_id)
     st.markdown("### Reports for this session")

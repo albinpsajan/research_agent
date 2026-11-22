@@ -40,9 +40,14 @@ class EvidenceAggregator:
     """Aggregates, associates, and verifies research evidence for candidate solutions."""
 
     @staticmethod
-    def calculate_source_relevance(source: SearchResult | ResearchSource, problem: ProblemCandidate) -> float:
+    def calculate_source_relevance(
+        source: SearchResult | ResearchSource,
+        problem: ProblemCandidate,
+        problem_tokens: set[str] | None = None,
+    ) -> float:
         """Calculate keyword overlap relevance between a research source and a problem."""
-        problem_tokens = _extract_keywords(f"{problem.title} {problem.domain} {problem.subdomain or ''} {problem.description}")
+        if problem_tokens is None:
+            problem_tokens = _extract_keywords(f"{problem.title} {problem.domain} {problem.subdomain or ''} {problem.description}")
         if not problem_tokens:
             return 0.0
 
@@ -69,13 +74,18 @@ class EvidenceAggregator:
         evidence_list: list[ProblemEvidence] = list(problem.evidence)
         seen_urls: set[str] = {e.source_url for e in evidence_list if e.source_url}
 
+        # Precompute problem keywords once instead of for each source in pool
+        problem_tokens = _extract_keywords(
+            f"{problem.title} {problem.domain} {problem.subdomain or ''} {problem.description}"
+        )
+
         # Score and rank sources from the pool
         scored_sources: list[tuple[float, SearchResult | ResearchSource]] = []
         for src in pool:
             url = src.url if hasattr(src, "url") else ""
             if not url or url in seen_urls:
                 continue
-            score = cls.calculate_source_relevance(src, problem)
+            score = cls.calculate_source_relevance(src, problem, problem_tokens=problem_tokens)
             # Require minimum relevance overlap
             if score >= 0.15:
                 scored_sources.append((score, src))

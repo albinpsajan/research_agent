@@ -16,7 +16,9 @@ from pydantic import BaseModel, Field, field_validator
 
 from config.logging_config import get_logger
 from src.agents.base import BaseAgent, evidence_lines
-from src.evaluation.rubric import EvaluationService
+from src.agents.innovation_research import InnovationResearchAgent
+from src.agents.solution_architect import SolutionArchitectAgent
+from src.evaluation.rubric import EvaluationService, V2_GATE_NAMES
 from src.models.candidate import CandidateSolution
 from src.models.domain import ProblemCandidate
 from src.models.evaluation import (
@@ -24,6 +26,7 @@ from src.models.evaluation import (
     DebateHistory,
     DebateRound,
     FinalEvaluationReport,
+    QualityGateStatus,
     WinnerSelection,
 )
 from src.models.hackathon import HackathonInput, HackathonIntelligence
@@ -32,6 +35,7 @@ from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.base import SearchResult
 from src.research.registry import SearchBundle
+from src.utils.hackathon_time import available_hours
 
 logger = get_logger("agents.adversarial_critic")
 
@@ -125,6 +129,14 @@ class AdversarialCriticAgent(BaseAgent):
         rounds_limit = max_rounds or self.settings.max_debate_rounds
         evaluations: list[CandidateEvaluation] = []
         debates: list[DebateHistory] = []
+        hours = available_hours(hackathon)
+
+        architect_agent = SolutionArchitectAgent(
+            self.llm, self.research, self.repository, self.settings
+        )
+        innovation_agent = InnovationResearchAgent(
+            self.llm, self.research, self.repository, self.settings
+        )
 
         for candidate in candidates:
             problem = problem_by_id.get(candidate.problem_candidate_id)
@@ -132,6 +144,87 @@ class AdversarialCriticAgent(BaseAgent):
             evaluation = self.evaluator.evaluate(
                 candidate, problem, gap, hackathon, intelligence
             )
+
+            # Iterative testing & improvement loop (bounded to max 2 rounds)
+            max_improvement_cycles = 2
+            for cycle in range(max_improvement_cycles):
+                if evaluation.all_gates_passed:
+                    break
+
+                unmet_gates = [
+                    g for g in evaluation.quality_gates
+                    if g.status.value != "passed" and g.status.value != "not_applicable"
+                ]
+                if not unmet_gates:
+                    break
+
+                fatal_gates = [
+                    g for g in unmet_gates
+                    if "THEME_ALIGNMENT" in g.justification
+                    or "COMMONLY_SOLVED" in g.justification
+                    or "ECONOMIC_BURDEN_EXCESSIVE" in g.justification
+                ]
+                if fatal_gates:
+                    candidate.elimination_reason = f"Fatal gate failure: {fatal_gates[0].name}. {fatal_gates[0].justification}"
+                    candidate.final_disposition = "eliminated"
+                    evaluation.elimination_reason = candidate.elimination_reason
+                    logger.info("Candidate '%s' has fatal gate failure: %s", candidate.title, candidate.elimination_reason)
+                    break
+
+                missing_evidence_gates = [
+                    g for g in unmet_gates
+                    if "RESEARCH_INSUFFICIENT" in g.justification
+                    or g.status == QualityGateStatus.INSUFFICIENT_EVIDENCE
+                    or g.name in {V2_GATE_NAMES[1], V2_GATE_NAMES[3]}
+                ]
+                fixable_weakness_gates = [
+                    g for g in unmet_gates
+                    if g not in missing_evidence_gates
+                ]
+
+                if not missing_evidence_gates and not fixable_weakness_gates:
+                    break
+
+                logger.info(
+                    "Attempting improvement round %d for candidate '%s' (Missing evidence: %d, Weaknesses: %d)",
+                    cycle + 1, candidate.title, len(missing_evidence_gates), len(fixable_weakness_gates),
+                )
+
+                # 1. Targeted Re-Research for missing evidence gates
+                if missing_evidence_gates and problem:
+                    for g in missing_evidence_gates:
+                        innovation_agent.targeted_research_for_gate(
+                            session_id=session_id,
+                            problem=problem,
+                            gap=gap,
+                            failing_gate_name=g.name,
+                        )
+
+                # 2. Solution Refinement for fixable weakness gates
+                if fixable_weakness_gates:
+                    candidate = architect_agent.refine_solution(
+                        candidate=candidate,
+                        criticisms=[g.justification for g in fixable_weakness_gates],
+                        failing_gates=[g.name for g in fixable_weakness_gates],
+                        available_hours=hours,
+                    )
+
+                # 3. Re-evaluate candidate against deterministic gates & updated evidence
+                evaluation = self.evaluator.re_evaluate_candidate(
+                    candidate=candidate,
+                    problem=problem,
+                    gap=gap,
+                    hackathon=hackathon,
+                    intelligence=intelligence,
+                    prior_evaluation=evaluation,
+                )
+
+            if not evaluation.all_gates_passed and not candidate.elimination_reason:
+                failing_names = [g.name for g in evaluation.quality_gates if g.status != QualityGateStatus.PASSED and g.status != QualityGateStatus.NOT_APPLICABLE]
+                candidate.elimination_reason = f"Did not pass mandatory quality gates after improvement: {', '.join(failing_names)}"
+                candidate.final_disposition = "eliminated"
+                evaluation.elimination_reason = candidate.elimination_reason
+
             debate = self._debate(
                 session_id, candidate, problem, gap, evaluation, rounds_limit
             )
@@ -140,6 +233,10 @@ class AdversarialCriticAgent(BaseAgent):
             )
             evaluation.debate_recommendation = debate.recommendation
             evaluation.calculate_total()
+
+            if evaluation.is_qualified:
+                candidate.final_disposition = "qualified"
+
             self.repository.save_evaluation(
                 session_id=session_id,
                 candidate_id=candidate.id or "",
@@ -152,6 +249,10 @@ class AdversarialCriticAgent(BaseAgent):
                     [g.model_dump() for g in evaluation.quality_gates]
                 ),
                 assessment=evaluation.overall_assessment,
+            )
+            self.repository.save_candidate_solution(
+                session_id=session_id,
+                candidate_data=candidate.model_dump(mode="json"),
             )
             evaluations.append(evaluation)
             debates.append(debate)
@@ -554,6 +655,14 @@ comparison."""
             ][:3]
 
         winner_candidate = candidate_by_id.get(chosen.candidate_id)
+        if winner_candidate:
+            winner_candidate.final_disposition = "winner"
+            self.repository.save_candidate_solution(session_id, winner_candidate.model_dump(mode="json"))
+        for rup in runner_ups:
+            rup_cand = candidate_by_id.get(rup.candidate_id)
+            if rup_cand and rup_cand.final_disposition != "winner":
+                rup_cand.final_disposition = "runner_up"
+                self.repository.save_candidate_solution(session_id, rup_cand.model_dump(mode="json"))
         return WinnerSelection(
             has_winner=True,
             winner=chosen,

@@ -12,7 +12,7 @@ from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
 from src.models.pipeline import PipelineOptions, PipelineResult
 from src.orchestration.pipeline import HackathonPipeline
 from src.research.base import ResearchError, validate_public_url
-from ui.components.common import get_llm, get_repository, hero, ollama_banner
+from ui.components.common import get_llm, get_repository, hero, navigate_to, ollama_banner
 
 
 def render() -> None:
@@ -375,11 +375,14 @@ def render() -> None:
 
     if is_multi_track and st.session_state.get("current_multi_result"):
         comp = st.session_state["current_multi_result"].comparison
-        if comp and comp.overall_winning_candidate:
+        if comp and (comp.overall_winner_evaluation or comp.overall_winning_candidate) and comp.overall_winning_track:
+            ev = comp.overall_winner_evaluation
+            w = comp.overall_winning_candidate
+            t_name = comp.overall_winning_track.name
+            cand_title = ev.candidate_title if ev else (w.title if w else "Winner")
+            cand_score = f" ({ev.total_score:.1f}/100)" if ev else ""
             st.success(
-                f"Multi-track winner: {comp.overall_winning_candidate.candidate_title} "
-                f"in track '{comp.overall_winning_track.name}' "
-                f"({comp.overall_winning_candidate.total_score:.1f}/100)"
+                f"Multi-track winner: {cand_title} in track '{t_name}'{cand_score}"
             )
         else:
             st.warning("Multi-track research finished. Check Results for per-track outcomes.")
@@ -393,5 +396,4 @@ def render() -> None:
             "No candidate passed every mandatory gate. This is an honest result; "
             "the report explains why."
         )
-    st.session_state["nav_choice"] = "Results"
-    st.rerun()
+    navigate_to("Results")
