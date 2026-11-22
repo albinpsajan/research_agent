@@ -1050,7 +1050,7 @@ class ReportGenerator:
             c_count = len(tr.feasibility.candidates) if tr and tr.feasibility else 0
             st_str = tr.status if tr else "pending"
             trk_table.append(
-                f"| `{trk.id}` | **{trk.name}** | {trk.description[:60] or 'General track scope'} | "
+                f"| `{trk.id}` | **{trk.name}** | {(trk.description or '')[:60] or 'General track scope'} | "
                 f"{d_count} | {p_count} | {c_count} | `{st_str}` |"
             )
         sections.append(ReportSection(number=3, title="Official Hackathon Tracks Portfolio", content="\n".join(trk_table)))

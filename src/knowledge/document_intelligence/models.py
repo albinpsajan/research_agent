@@ -89,6 +89,7 @@ class ExtractedTrack(BaseModel):
     name: str
     description: str | None = None
     track_rules: str | None = None
+    official_track_url: str | None = None
     source_filename: str = ""
     source_page: int = 1
     confidence: float = 1.0
@@ -180,6 +181,7 @@ class StructuredHackathonDoc(BaseModel):
     hackathon_name: str | None = None
     organizer: str | None = None
     official_website: str | None = None
+    official_rules_url: str | None = None
     theme: str | None = None
     tracks: list[str] = Field(default_factory=list)
     problem_statements: list[str] = Field(default_factory=list)

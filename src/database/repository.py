@@ -683,9 +683,9 @@ class Repository:
             for t in tracks:
                 track_id = t.id if hasattr(t, "id") else t.get("id")
                 track_name = t.name if hasattr(t, "name") else t.get("name")
-                desc = t.description if hasattr(t, "description") else t.get("description", "")
-                rules = t.track_rules if hasattr(t, "track_rules") else t.get("track_rules", "")
-                url = t.official_track_url if hasattr(t, "official_track_url") else t.get("official_track_url", "")
+                desc = t.description if hasattr(t, "description") else t.get("description")
+                rules = t.track_rules if hasattr(t, "track_rules") else t.get("track_rules")
+                url = t.official_track_url if hasattr(t, "official_track_url") else t.get("official_track_url")
                 conn.execute(
                     """INSERT OR REPLACE INTO hackathon_tracks (id, session_id, track_name, description, track_rules, official_url)
                        VALUES (?, ?, ?, ?, ?, ?)""",

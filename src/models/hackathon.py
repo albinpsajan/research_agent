@@ -2,15 +2,66 @@
 
 from __future__ import annotations
 
+import ipaddress
 from datetime import datetime
-
 from enum import StrEnum
+from urllib.parse import urlparse
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from src.models.provenance import CategorizedConstraint
 from src.utils.hackathon_time import utc_now
+
+_BLOCKED_HOSTS = {
+    "localhost",
+    "localhost.localdomain",
+    "metadata.google.internal",
+}
+
+
+def _validate_external_url(url: str | None, field_name: str = "URL") -> str | None:
+    """Validate external public URL without blocking on network DNS resolution.
+
+    Ensures that only valid HTTP or HTTPS URLs with valid hosts are accepted,
+    strictly rejecting internal/unsupported schemes (e.g. 'doc://', 'ftp://'),
+    embedded credentials, and localhost / private network addresses.
+    Returns None if url is None or empty.
+    """
+    if url is None:
+        return None
+    if isinstance(url, str):
+        clean = url.strip()
+        if not clean:
+            return None
+        parsed = urlparse(clean)
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in ("http", "https"):
+            raise ValueError(
+                f"Unsupported URL scheme: '{parsed.scheme}'. Only HTTP and HTTPS URLs are accepted for {field_name}."
+            )
+        if parsed.username or parsed.password:
+            raise ValueError(f"{field_name} cannot contain embedded credentials")
+        host = (parsed.hostname or "").lower()
+        if not host:
+            raise ValueError(f"Invalid {field_name}: missing hostname")
+        if host in _BLOCKED_HOSTS or host.endswith(".local"):
+            raise ValueError(f"Blocked host in {field_name}: {host}")
+        try:
+            ip = ipaddress.ip_address(host)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+            ):
+                raise ValueError(f"Private or reserved address blocked in {field_name}: {host}")
+        except ValueError as err:
+            if "blocked in" in str(err):
+                raise
+        return clean
+    raise ValueError(f"{field_name} must be a valid string or None")
 
 
 class MultiTrackMode(StrEnum):
@@ -25,9 +76,14 @@ class HackathonTrack(BaseModel):
 
     id: str = Field(default_factory=lambda: f"TRK-{uuid4().hex[:6]}")
     name: str = Field(..., min_length=2, description="Track name")
-    description: str = Field(default="", description="Track description, scope or problem statement guidance")
-    track_rules: str = Field(default="", description="Track-specific constraints, rules, or judging criteria")
-    official_track_url: str = Field(default="", description="URL to official track documentation")
+    description: str | None = Field(default=None, description="Track description, scope or problem statement guidance")
+    track_rules: str | None = Field(default=None, description="Track-specific constraints, rules, or judging criteria")
+    official_track_url: str | None = Field(default=None, description="URL to official track documentation")
+
+    @field_validator("official_track_url", mode="before")
+    @classmethod
+    def validate_track_url(cls, v: str | None) -> str | None:
+        return _validate_external_url(v, field_name="official_track_url")
 
 
 class HackathonInput(BaseModel):
@@ -48,6 +104,11 @@ class HackathonInput(BaseModel):
         description="Operating mode: Best Overall Track (Mode A) or Best Idea Per Track (Mode B)",
     )
     tracks: list[HackathonTrack] = Field(default_factory=list, description="Supplied hackathon tracks")
+
+    @field_validator("website_url", "rules_url", mode="before")
+    @classmethod
+    def validate_input_urls(cls, v: str | None, info: ValidationInfo) -> str | None:
+        return _validate_external_url(v, field_name=info.field_name)
 
 
 class OrganizerProfile(BaseModel):

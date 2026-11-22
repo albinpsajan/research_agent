@@ -104,9 +104,9 @@ def load_multi_track_result(
         HackathonTrack(
             id=r["id"],
             name=r["track_name"],
-            description=r.get("description") or "",
-            track_rules=r.get("track_rules") or "",
-            official_track_url=r.get("official_url") or "",
+            description=r.get("description"),
+            track_rules=r.get("track_rules"),
+            official_track_url=r.get("official_url"),
         )
         for r in tracks_rows
     ]

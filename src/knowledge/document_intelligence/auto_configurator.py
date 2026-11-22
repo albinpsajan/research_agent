@@ -108,9 +108,9 @@ class HackathonAutoConfigurator:
                 tracks.append(
                     HackathonTrack(
                         name=t.name,
-                        description=t.description or "",
-                        track_rules=t.track_rules or "",
-                        official_track_url="",
+                        description=t.description,
+                        track_rules=t.track_rules,
+                        official_track_url=getattr(t, "official_track_url", None),
                     )
                 )
         elif profile.tracks:
@@ -118,9 +118,9 @@ class HackathonAutoConfigurator:
                 tracks.append(
                     HackathonTrack(
                         name=t_name,
-                        description="",
-                        track_rules="",
-                        official_track_url="",
+                        description=None,
+                        track_rules=None,
+                        official_track_url=None,
                     )
                 )
 

@@ -152,9 +152,9 @@ def render() -> None:
             for i in range(int(num_tracks)):
                 track_obj = auto_cfg.tracks[i] if (auto_cfg and i < len(auto_cfg.tracks)) else None
                 t_def_name = track_obj.name if track_obj else ""
-                t_def_desc = track_obj.description if track_obj else ""
-                t_def_rules = track_obj.track_rules if track_obj else ""
-                t_def_url = track_obj.official_track_url if track_obj else ""
+                t_def_desc = track_obj.description or "" if track_obj else ""
+                t_def_rules = track_obj.track_rules or "" if track_obj else ""
+                t_def_url = track_obj.official_track_url or "" if track_obj else ""
 
                 expander_title = f"Track {i+1} Details: {t_def_name}" if t_def_name else f"Track {i+1} Details"
                 with st.expander(expander_title, expanded=(i < 3)):
@@ -265,9 +265,13 @@ def render() -> None:
         for idx, (t_name, t_desc, t_rules, t_url) in enumerate(track_inputs):
             name_clean = t_name.strip()
             if name_clean:
-                if t_url and t_url.strip():
+                clean_url = t_url.strip() if t_url else None
+                if clean_url:
+                    if clean_url.startswith("doc://"):
+                        st.error(f"Track {idx+1} URL cannot be an internal document reference ('doc://'). Uploaded documents are automatically used as primary evidence.")
+                        return
                     try:
-                        validate_public_url(t_url.strip())
+                        validate_public_url(clean_url)
                     except ResearchError as exc:
                         st.error(f"Track {idx+1} URL rejected: {exc}")
                         return
@@ -276,7 +280,7 @@ def render() -> None:
                         name=name_clean,
                         description=t_desc.strip() or None,
                         track_rules=t_rules.strip() or None,
-                        official_track_url=t_url.strip() or None,
+                        official_track_url=clean_url or None,
                     )
                 )
         if not parsed_tracks:
