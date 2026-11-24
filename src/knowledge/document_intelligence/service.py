@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from pathlib import Path
-import re
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 

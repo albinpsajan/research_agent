@@ -223,10 +223,10 @@ class EvidenceAggregator:
         # 5. Technical architecture
         if not candidate.technical_architecture or len(candidate.technical_architecture.strip()) < 30:
             candidate.technical_architecture = (
-                f"Multi-tier modular pipeline: (1) Data Ingestion: Collects localized environmental, sensor, "
-                f"or open satellite datasets; (2) Core Analytics Engine: Processes predictive models and rule-based "
-                f"agronomic recommendations; (3) Edge/Offline Service: Provides cached responses and sync capabilities; "
-                f"(4) User Interface: Lightweight responsive client optimized for low-bandwidth environments."
+                "Multi-tier modular pipeline: (1) Data Ingestion: Collects localized environmental, sensor, "
+                "or open satellite datasets; (2) Core Analytics Engine: Processes predictive models and rule-based "
+                "agronomic recommendations; (3) Edge/Offline Service: Provides cached responses and sync capabilities; "
+                "(4) User Interface: Lightweight responsive client optimized for low-bandwidth environments."
             )
 
         # 6. Risks and Mitigations (Mandatory Quality Gate 6)

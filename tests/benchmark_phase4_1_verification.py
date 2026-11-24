@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import ctypes
 import json
-import os
 import subprocess
 import sys
 import time
@@ -21,7 +20,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import httpx
 from src.llm.client import OllamaClient
 
 
@@ -81,7 +79,7 @@ def main() -> None:
     ram_base_used, ram_total, ram_pct = get_system_ram_mb()
     gpu_base_used, gpu_total = get_gpu_vram_mb()
 
-    print(f"\n[STEP 1] Initial Hardware State:")
+    print("\n[STEP 1] Initial Hardware State:")
     print(f"  CPU Model:       {cpu}")
     print(f"  System RAM Base: {ram_base_used:.1f} MB / {ram_total:.1f} MB ({ram_pct}% load)")
     print(f"  GPU VRAM Base:   {gpu_base_used} MiB / {gpu_total} MiB")

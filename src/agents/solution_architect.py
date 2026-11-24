@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from config.logging_config import get_logger
 from src.agents.base import BaseAgent
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.models.candidate import (
     CandidateSolution,
     FeasibilityReport,
@@ -18,8 +20,6 @@ from src.models.candidate import (
 from src.models.domain import ProblemCandidate
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap, OpportunityClassification
-from src.knowledge.hackathon_playbook import HackathonPlaybookService
-from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.evidence_aggregator import EvidenceAggregator
 
 logger = get_logger("agents.solution_architect")

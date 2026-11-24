@@ -21,6 +21,8 @@ from src.agents.base import (
     stem_tokens,
     token_similarity,
 )
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.models.domain import (
     DiscoveredDomain,
     DomainMap,
@@ -28,8 +30,6 @@ from src.models.domain import (
     ProblemCandidate,
 )
 from src.models.hackathon import HackathonIntelligence
-from src.knowledge.hackathon_playbook import HackathonPlaybookService
-from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.base import SearchResult
 from src.research.evidence_aggregator import EvidenceAggregator
 from src.research.sources import KeralaIndiaSourceRegistry

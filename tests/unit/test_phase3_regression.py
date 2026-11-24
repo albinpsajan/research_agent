@@ -17,7 +17,13 @@ from __future__ import annotations
 
 from src.evaluation.rubric import GATE_NAMES
 from src.models.candidate import CandidateSolution
-from src.models.domain import DiscoveredDomain, DomainMap, DomainRelevance, ProblemCandidate, ProblemEvidence
+from src.models.domain import (
+    DiscoveredDomain,
+    DomainMap,
+    DomainRelevance,
+    ProblemCandidate,
+    ProblemEvidence,
+)
 from src.models.pipeline import PipelineOptions
 from src.models.provenance import CategorizedConstraint, ProvenanceCategory
 from src.models.research import (
@@ -31,7 +37,6 @@ from src.models.research import (
 from src.research.base import SearchResult
 from src.research.evidence_aggregator import EvidenceAggregator
 from src.research.github import optimize_github_query
-
 
 # ---------------------------------------------------------------------------
 # 1. Dynamic Domain Discovery & Stopping Reason

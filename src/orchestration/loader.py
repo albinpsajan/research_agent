@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Any
 
 from src.database.repository import Repository
 from src.models.candidate import FeasibilityReport
 from src.models.domain import DomainMap
 from src.models.evaluation import FinalEvaluationReport
-from src.models.hackathon import HackathonInput, HackathonIntelligence, HackathonTrack, MultiTrackMode
+from src.models.hackathon import (
+    HackathonInput,
+    HackathonIntelligence,
+    HackathonTrack,
+    MultiTrackMode,
+)
 from src.models.multitrack import (
     CrossTrackComparisonResult,
     MultiTrackPipelineResult,
@@ -18,6 +24,16 @@ from src.models.multitrack import (
 from src.models.pipeline import PipelineResult
 from src.models.report import FinalReport
 from src.models.research import InnovationReport
+
+
+def _clean_url(url: str | None) -> str | None:
+    """Sanitize URL from historical data, ignoring internal doc:// pseudo-schemes."""
+    if not url:
+        return None
+    cleaned = str(url).strip()
+    if cleaned.lower().startswith(("http://", "https://")):
+        return cleaned
+    return None
 
 
 def _latest(repository: Repository, session_id: str, agent: str) -> dict | None:
@@ -42,8 +58,8 @@ def load_session_result(
     hackathon = HackathonInput(
         theme=session["hackathon_theme"],
         name=session.get("hackathon_name"),
-        website_url=session.get("website_url"),
-        rules_url=session.get("rules_url"),
+        website_url=_clean_url(session.get("website_url")),
+        rules_url=_clean_url(session.get("rules_url")),
         deadline=deadline,
         constraints=session.get("constraints"),
         session_id=session_id,
@@ -106,7 +122,7 @@ def load_multi_track_result(
             name=r["track_name"],
             description=r.get("description"),
             track_rules=r.get("track_rules"),
-            official_track_url=r.get("official_url"),
+            official_track_url=_clean_url(r.get("official_url")),
         )
         for r in tracks_rows
     ]
@@ -124,8 +140,8 @@ def load_multi_track_result(
     hackathon = HackathonInput(
         theme=session["hackathon_theme"],
         name=session.get("hackathon_name"),
-        website_url=session.get("website_url"),
-        rules_url=session.get("rules_url"),
+        website_url=_clean_url(session.get("website_url")),
+        rules_url=_clean_url(session.get("rules_url")),
         deadline=deadline,
         constraints=session.get("constraints"),
         session_id=session_id,

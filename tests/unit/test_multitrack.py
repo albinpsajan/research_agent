@@ -3,21 +3,13 @@
 from __future__ import annotations
 
 import gc
-from datetime import datetime
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-
-from config.settings import get_settings
 from src.agents.domain_discovery import DomainListLLM, DomainLLM
-from src.database.repository import Repository
 from src.evaluation.cross_track_comparison import CrossTrackComparisonEngine
 from src.models.candidate import CandidateSolution, FeasibilityReport
-from src.models.domain import DiscoveredDomain, DomainMap, ProblemCandidate
 from src.models.evaluation import (
     CandidateEvaluation,
-    FinalEvaluationReport,
     QualityGate,
     QualityGateStatus,
     ScoreCriterion,

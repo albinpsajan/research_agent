@@ -320,3 +320,9 @@ class ResearchHttpClient:
 
     def close(self) -> None:
         self._client.close()
+
+    def __enter__(self) -> ResearchHttpClient:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()

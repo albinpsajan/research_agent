@@ -7,8 +7,6 @@ import streamlit as st
 from src.knowledge.hackathon_playbook.database import PlaybookDatabase
 from src.knowledge.hackathon_playbook.schema import PlaybookCategory
 from src.research.sources.kerala_india_registry import KeralaIndiaSourceRegistry
-
-
 from ui.components.common import hero
 
 

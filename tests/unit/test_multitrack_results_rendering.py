@@ -13,17 +13,10 @@ Verifies:
 
 from __future__ import annotations
 
-import json
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from src.database.connection import DatabaseConnection
 from src.database.repository import Repository
-from src.evaluation.cross_track_comparison import CrossTrackComparisonEngine
-from src.models.candidate import CandidateSolution, FeasibilityReport
-from src.models.domain import DiscoveredDomain, DomainMap, ProblemCandidate, ProblemEvidence
+from src.models.candidate import CandidateSolution
 from src.models.evaluation import (
     CandidateEvaluation,
     QualityGate,
@@ -33,14 +26,10 @@ from src.models.evaluation import (
 )
 from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
 from src.models.multitrack import (
-    CrossTrackComparisonItem,
     CrossTrackComparisonResult,
     MultiTrackPipelineResult,
     TrackResult,
 )
-from src.models.pipeline import PipelineResult
-from src.models.report import FinalReport, ReportMetadata
-from src.models.research import InnovationReport
 from src.orchestration.loader import load_multi_track_result
 from ui.pages.results import _render_multi_track
 

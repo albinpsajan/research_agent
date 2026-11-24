@@ -13,19 +13,22 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
-from src.agents.adversarial_critic import AdversarialCriticAgent
-from src.agents.innovation_research import InnovationResearchAgent
 from src.agents.solution_architect import SolutionArchitectAgent
-from src.evaluation.rubric import EvaluationService, GATE_NAMES, V2_GATE_NAMES
-from src.models.candidate import CandidateSolution, SolutionRevision, TechnicalRequirement
+from src.evaluation.rubric import GATE_NAMES, EvaluationService
+from src.models.candidate import (
+    CandidateSolution,
+    TechnicalRequirement,
+)
 from src.models.domain import ProblemCandidate, ProblemEvidence
-from src.models.evaluation import CandidateEvaluation, QualityGate, QualityGateStatus, ScoreCriterion
+from src.models.evaluation import (
+    CandidateEvaluation,
+    QualityGate,
+    QualityGateStatus,
+    ScoreCriterion,
+)
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap, OpportunityClassification
-from src.reports.generator import _evaluation_table, _score_table, ReportGenerator
-from src.research.base import SearchResult
+from src.reports.generator import ReportGenerator, _evaluation_table
 
 
 def _make_candidate(

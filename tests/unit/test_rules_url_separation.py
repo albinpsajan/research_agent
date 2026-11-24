@@ -12,19 +12,19 @@ from src.agents.hackathon_intelligence import HackathonIntelligenceAgent
 from src.database.connection import DatabaseConnection
 from src.database.migrations import initialize_database
 from src.database.repository import Repository
-from src.knowledge.document_intelligence.auto_configurator import HackathonAutoConfigurator
+from src.knowledge.document_intelligence.auto_configurator import (
+    HackathonAutoConfigurator,
+)
 from src.knowledge.document_intelligence.models import (
     DocumentType,
-    ExtractedTrack,
     ProvenancedField,
     StructuredHackathonDoc,
     UploadedDocument,
 )
 from src.knowledge.document_intelligence.service import DocumentIntelligenceService
-from src.models.candidate import CandidateSolution, FeasibilityReport
 from src.models.evaluation import FinalEvaluationReport, WinnerSelection
 from src.models.hackathon import HackathonInput, MultiTrackMode
-from src.models.pipeline import PipelineOptions, PipelineResult
+from src.models.pipeline import PipelineResult
 from src.reports.generator import ReportGenerator
 from src.research.base import ResearchError, validate_public_url
 from src.research.registry import ResearchService

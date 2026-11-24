@@ -18,7 +18,9 @@ from config.logging_config import get_logger
 from src.agents.base import BaseAgent, evidence_lines
 from src.agents.innovation_research import InnovationResearchAgent
 from src.agents.solution_architect import SolutionArchitectAgent
-from src.evaluation.rubric import EvaluationService, V2_GATE_NAMES
+from src.evaluation.rubric import V2_GATE_NAMES, EvaluationService
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.models.candidate import CandidateSolution
 from src.models.domain import ProblemCandidate
 from src.models.evaluation import (
@@ -31,8 +33,6 @@ from src.models.evaluation import (
 )
 from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.research import InnovationGap
-from src.knowledge.hackathon_playbook import HackathonPlaybookService
-from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.base import SearchResult
 from src.research.registry import SearchBundle
 from src.utils.hackathon_time import available_hours

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -10,14 +11,16 @@ from src.agents.base import is_valid_provenance
 from src.database.connection import DatabaseConnection
 from src.database.migrations import initialize_database
 from src.database.repository import Repository
-from src.knowledge.document_intelligence.auto_configurator import HackathonAutoConfigurator
+from src.knowledge.document_intelligence.auto_configurator import (
+    HackathonAutoConfigurator,
+)
 from src.knowledge.document_intelligence.models import (
     DocumentType,
     ExtractedTrack,
     StructuredHackathonDoc,
     UploadedDocument,
 )
-from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
+from src.models.hackathon import HackathonTrack, MultiTrackMode
 from src.orchestration.loader import load_multi_track_result
 
 

@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from config.logging_config import get_logger
 from src.agents.base import BaseAgent, allowed_urls, sanitize_model_urls
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.models.hackathon import (
     HackathonInput,
     HackathonIntelligence,
@@ -18,8 +20,6 @@ from src.models.hackathon import (
     SponsorProfile,
 )
 from src.models.provenance import CategorizedConstraint, ProvenanceCategory
-from src.knowledge.hackathon_playbook import HackathonPlaybookService
-from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.base import ResearchError
 from src.research.registry import SearchBundle
 

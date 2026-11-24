@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from config.logging_config import get_logger
 from src.agents.base import BaseAgent, evidence_lines
+from src.knowledge.document_intelligence.service import DocumentIntelligenceService
+from src.knowledge.hackathon_playbook import HackathonPlaybookService
 from src.models.domain import ProblemCandidate
 from src.models.research import (
     ExistingSolution,
@@ -18,8 +20,6 @@ from src.models.research import (
     ResearchSource,
     VerificationLevel,
 )
-from src.knowledge.hackathon_playbook import HackathonPlaybookService
-from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.research.base import SearchResult
 from src.research.evidence_aggregator import EvidenceAggregator
 

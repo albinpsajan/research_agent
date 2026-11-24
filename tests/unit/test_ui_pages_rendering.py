@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
-import pytest
 
-from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
-from src.models.pipeline import PipelineResult
+from src.models.candidate import CandidateSolution, FeasibilityReport
 from src.models.evaluation import (
-    WinnerSelection,
     CandidateEvaluation,
-    ScoreCriterion,
     QualityGate,
     QualityGateStatus,
+    ScoreCriterion,
+    WinnerSelection,
 )
-from src.models.candidate import CandidateSolution, FeasibilityReport
-from src.models.domain import DiscoveredDomain, DomainMap, ProblemCandidate, DomainRelevance
-from src.models.research import InnovationReport
-from src.models.multitrack import MultiTrackPipelineResult, CrossTrackComparisonResult, TrackResult
+from src.models.hackathon import HackathonInput
+from src.models.pipeline import PipelineResult
 
 
 def _mock_st():

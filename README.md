@@ -17,7 +17,7 @@ No paid AI API is required. All inference runs through one shared local Ollama m
 | 2 | Dynamic Domain & Problem Discovery | Domains generated from the theme and organiser evidence (no fixed industry list), with grounded problem candidates |
 | 3 | Global Innovation & Existing-Solution Research | Real GitHub projects, papers (arXiv/OpenAlex/Crossref), products, news; honest opportunity classification |
 | 4 | Solution Architect & Feasibility | Cross-domain finalists, architecture, data/API needs, risks, hour estimates |
-| 5 | Adversarial Critic & Final Evaluator | Bounded evidence-backed debate, 100-point rubric, seven mandatory gates, independent selection or rejection |
+| 5 | Adversarial Critic & Final Evaluator | Bounded evidence-backed debate, 100-point rubric, ten mandatory gates, independent selection or honest rejection |
 
 The final artefact is a persisted 24-section Markdown report with provenance, freshness,
 debate transcript, scoring breakdown, gate outcomes and a downloadable JSON result.
@@ -44,7 +44,7 @@ pip install -e .
 # 2. Ollama (if not already installed)
 winget install --id Ollama.Ollama --exact
 
-# 3. Pull the local model (or use the Settings page, which checks disk first)
+# 3. Pull the local model
 ollama pull qwen2.5:7b
 
 # 4. Check everything
@@ -77,6 +77,24 @@ python -m src.cli report --session-id <id> --out report.md
 
 A full run typically takes 10–40 minutes on a 6 GB RTX 3050 depending on domain
 count, model speed and network conditions. Research quality is prioritised over speed.
+
+---
+
+## User Interface — Minimal Two-Page Experience
+
+HackathonIQ features a streamlined ChatGPT-style research workspace designed around two core views:
+
+1. **New Research**:
+   - **Option A Guided Workflow**: Ingests hackathon PDFs, images, and rulebooks to auto-extract parameters, while keeping full user control (research launches **only** upon explicit user confirmation).
+   - **Manual Parameter Builder**: Allows defining single- or multi-track challenges manually with configurable geographical priority (Kerala, India National, Global).
+   - **Pre-Flight Duplicate Detection**: Detects matching past research runs and offers instant result loading or clean re-runs.
+   - **Live Deliberation Progress**: Transparent 5-stage pipeline indicator replacing raw developer logs.
+   - **Embedded Results Workspace**: Seamlessly explores winning solution blueprints, cross-track comparisons, quality gate audits, and grounded evidence citations.
+
+2. **History**:
+   - **Single-Topic Archive**: One clean card per research session displaying hackathon theme, track count, mode, and execution status.
+   - **Search & Filtering**: Search across past hackathons and filter by completion status and track mode.
+   - **Direct Actions**: Instant result inspection (`[Load Results →]`), markdown report exports (`[📄 Download Report]`), and safe cascading deletion (`[🗑 Delete]`).
 
 ---
 

@@ -16,16 +16,27 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from config.settings import get_settings  # noqa: E402
-from src.storage.manager import StorageManager  # noqa: E402
 import ui.components.common  # noqa: E402
+from config.settings import get_settings  # noqa: E402
 
 try:
-    from ui.components.common import APP_VERSION, PAGE_ALIASES, get_llm, get_repository, inject_css  # noqa: E402
+    from ui.components.common import (  # noqa: E402
+        APP_VERSION,
+        PAGE_ALIASES,
+        get_llm,
+        get_repository,
+        inject_css,
+    )
 except ImportError:
     import importlib
     importlib.reload(ui.components.common)
-    from ui.components.common import APP_VERSION, PAGE_ALIASES, get_llm, get_repository, inject_css  # noqa: E402
+    from ui.components.common import (  # noqa: E402
+        APP_VERSION,
+        PAGE_ALIASES,
+        get_llm,
+        get_repository,
+        inject_css,
+    )
 
 from ui.pages import history, new_research  # noqa: E402
 

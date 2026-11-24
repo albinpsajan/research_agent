@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.database.repository import Repository
 
+
 def main() -> None:
     repo = Repository()
     session_id = "a388fd9e-73f8-4c3e-9a62-2a1a3f5ecf92"

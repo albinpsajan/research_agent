@@ -5,7 +5,6 @@ Preserves all previous reports and sessions, and generates data/reports/R-phase4
 
 from __future__ import annotations
 
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.database.repository import Repository
-from src.models.candidate import CandidateSolution, FeasibilityReport, TechnicalRequirement, RiskAssessment
+from src.models.candidate import (
+    FeasibilityReport,
+)
 from src.models.evaluation import (
     CandidateEvaluation,
     FinalEvaluationReport,
@@ -26,6 +27,7 @@ from src.models.evaluation import (
 from src.models.pipeline import PipelineResult
 from src.reports.generator import ReportGenerator
 
+
 def main() -> None:
     repo = Repository()
     session_id = "a388fd9e-73f8-4c3e-9a62-2a1a3f5ecf92"
@@ -36,8 +38,8 @@ def main() -> None:
     # 1. Retrieve all stored objects from agent results
     ar_map = {r["agent_name"]: r["result_data"] for r in agent_results}
 
-    from src.models.hackathon import HackathonInput, HackathonIntelligence
     from src.models.domain import DomainMap
+    from src.models.hackathon import HackathonInput, HackathonIntelligence
     from src.models.research import InnovationReport
 
     hackathon = HackathonInput(

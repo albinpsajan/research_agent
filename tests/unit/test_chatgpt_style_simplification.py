@@ -13,10 +13,9 @@ Verifies:
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
-import pytest
 
 from src.database.repository import Repository
-from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
+from src.models.hackathon import HackathonInput, HackathonTrack
 from ui.app import PAGES
 from ui.components.common import PAGE_ALIASES
 

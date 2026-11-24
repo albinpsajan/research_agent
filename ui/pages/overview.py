@@ -5,8 +5,8 @@ from __future__ import annotations
 import streamlit as st
 
 from config.settings import get_settings
-from src.orchestration.loader import load_multi_track_result, load_session_result
 from src.models.pipeline import PipelineResult
+from src.orchestration.loader import load_multi_track_result, load_session_result
 from src.storage.manager import StorageManager
 from ui.components.common import (
     badge,
@@ -141,7 +141,7 @@ def render() -> None:
                 )
             with col_s2:
                 st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-                if st.button(f"Load Results", key=f"ov_load_{s_id}", use_container_width=True):
+                if st.button("Load Results", key=f"ov_load_{s_id}", use_container_width=True):
                     _load_session_into_state(s_id, is_multi, repo)
                     navigate_to("Results & Comparisons")
 

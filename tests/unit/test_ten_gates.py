@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from src.evaluation.rubric import GATE_NAMES, V1_GATE_NAMES, V2_GATE_NAMES, EvaluationService
+from src.evaluation.rubric import (
+    GATE_NAMES,
+    V1_GATE_NAMES,
+    V2_GATE_NAMES,
+    EvaluationService,
+)
 from src.models.candidate import (
     CandidateSolution,
     RiskAssessment,

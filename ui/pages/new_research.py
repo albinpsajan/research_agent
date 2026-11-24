@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, time, timedelta
 
 import streamlit as st
 
 from config.settings import get_settings
-from src.knowledge.document_intelligence.extractor import validate_uploaded_file
 from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
 from src.models.pipeline import PipelineOptions, PipelineResult
@@ -16,7 +14,6 @@ from src.orchestration.loader import load_multi_track_result, load_session_resul
 from src.orchestration.pipeline import HackathonPipeline
 from src.research.base import ResearchError, validate_public_url
 from ui.components.common import (
-    badge,
     format_datetime,
     get_llm,
     get_repository,

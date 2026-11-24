@@ -6,7 +6,6 @@ import pandas as pd
 import streamlit as st
 
 from ui.components.common import (
-    badge,
     empty_state,
     format_datetime,
     get_repository,

@@ -10,7 +10,6 @@ from src.models.research import (
 from src.research.evidence_aggregator import EvidenceAggregator
 from src.research.sources import (
     KeralaIndiaSourceRegistry,
-    OfficialSource,
     SourceCoverageStatus,
 )
 

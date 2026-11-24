@@ -399,3 +399,9 @@ class OllamaClient:
 
     def close(self) -> None:
         self._http.close()
+
+    def __enter__(self) -> OllamaClient:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()

@@ -13,17 +13,14 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
 
-import pytest
-
-from src.agents.base import similarity, stem_tokens, token_similarity
+from src.agents.base import stem_tokens
 from src.agents.domain_discovery import DomainDiscoveryAgent
 from src.database.migrations import get_current_version
 from src.database.repository import Repository
 from src.evaluation.cross_track_comparison import CrossTrackComparisonEngine
 from src.models.candidate import CandidateSolution
-from src.models.domain import ProblemCandidate, ProblemEvidence
+from src.models.domain import ProblemCandidate
 from src.models.evaluation import CandidateEvaluation, ScoreCriterion
 from src.models.hackathon import HackathonTrack
 from src.research.base import SearchResult

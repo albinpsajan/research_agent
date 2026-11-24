@@ -2,26 +2,24 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 from src.database.connection import DatabaseConnection
 from src.database.migrations import initialize_database
 from src.database.repository import Repository
-from src.knowledge.document_intelligence.auto_configurator import HackathonAutoConfigurator
+from src.knowledge.document_intelligence.auto_configurator import (
+    HackathonAutoConfigurator,
+)
 from src.knowledge.document_intelligence.models import (
     DocumentType,
-    ExtractedTrack,
     StructuredHackathonDoc,
     UploadedDocument,
 )
 from src.knowledge.document_intelligence.service import DocumentIntelligenceService
-from src.models.hackathon import HackathonInput, MultiTrackMode
+from src.models.hackathon import MultiTrackMode
 from tests.fakes import FakeLLM
-
 
 BEACHHACK_SAMPLE_FACTS = [
     "BeachHack Season 08 is held from 5th to 7th February 2027.",
