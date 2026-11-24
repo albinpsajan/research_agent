@@ -92,6 +92,79 @@ class Repository:
         )
         return [dict(r) for r in rows]
 
+    def find_session_by_theme_or_name(
+        self, theme: str = "", name: str | None = None
+    ) -> dict | None:
+        """Find existing session matching theme or hackathon name for duplicate detection."""
+        theme_clean = theme.strip().lower() if theme and theme.strip() else None
+        name_clean = name.strip().lower() if name and name.strip() else None
+
+        sessions = self.list_sessions(limit=100)
+        for s in sessions:
+            s_theme = (s.get("hackathon_theme") or "").strip().lower()
+            s_name = (
+                (s.get("hackathon_name") or "").strip().lower()
+                if s.get("hackathon_name")
+                else None
+            )
+            if theme_clean and s_theme == theme_clean:
+                return s
+            if name_clean and s_name and (s_name == name_clean):
+                return s
+        return None
+
+    def delete_session(self, session_id: str) -> bool:
+        """Cascade delete a research session and all associated child records."""
+        with self.db.transaction() as conn:
+            conn.execute(
+                "DELETE FROM hackathon_tracks WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM multi_track_comparisons WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.execute(
+                "DELETE FROM document_chunks WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM document_structured_extractions WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.execute(
+                "UPDATE uploaded_documents SET session_id = NULL WHERE session_id = ?",
+                (session_id,),
+            )
+            conn.execute(
+                "DELETE FROM evaluations WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM debate_history WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM existing_solutions WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM candidate_solutions WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM problem_candidates WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM domain_discoveries WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM agent_results WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM final_reports WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM research_sources WHERE session_id = ?", (session_id,)
+            )
+            cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            logger.info(f"Deleted research session {session_id[:8]} and all child records")
+            return cur.rowcount > 0
+
     # --- Agent Results ---
 
     def save_agent_result(

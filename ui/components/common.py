@@ -16,30 +16,29 @@ from src.database.migrations import initialize_database  # noqa: E402
 from src.database.repository import Repository  # noqa: E402
 from src.llm.client import OllamaClient  # noqa: E402
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.5.0"
 
-# Canonical page name mappings for backward compatibility
+# Canonical page name mappings: only TWO primary pages (New Research & History)
 PAGE_ALIASES: dict[str, str] = {
-    "Overview": "Overview",
     "New research": "New Research",
     "New Research": "New Research",
-    "Research Workspace": "Research Workspace",
-    "Workspace": "Research Workspace",
-    "Results": "Results & Comparisons",
-    "Results & Comparisons": "Results & Comparisons",
-    "Documents": "Document Intelligence",
-    "Document Intelligence": "Document Intelligence",
-    "Playbook": "Hackathon Playbook",
-    "Hackathon Playbook": "Hackathon Playbook",
-    "History": "Research History",
-    "Research History": "Research History",
-    "Intelligence": "Document Intelligence",
-    "Settings": "Settings",
+    "History": "History",
+    "Research History": "History",
+    "Results": "New Research",
+    "Results & Comparisons": "New Research",
+    "Overview": "New Research",
+    "Workspace": "New Research",
+    "Research Workspace": "New Research",
+    "Documents": "New Research",
+    "Document Intelligence": "New Research",
+    "Playbook": "New Research",
+    "Hackathon Playbook": "New Research",
+    "Settings": "New Research",
 }
 
 
 def inject_css() -> None:
-    """Inject HackathonIQ dark theme design system CSS."""
+    """Inject HackathonIQ ChatGPT-inspired dark theme design system CSS."""
     st.markdown(
         """
         <style>
@@ -52,7 +51,7 @@ def inject_css() -> None:
             --panel-elevated: #1e293b;
             --panel-hover: #243248;
             --line: rgba(148, 163, 184, 0.12);
-            --line-strong: rgba(148, 163, 184, 0.24);
+            --line-strong: rgba(148, 163, 184, 0.22);
 
             /* Typography */
             --text-primary: #f8fafc;
@@ -62,30 +61,26 @@ def inject_css() -> None:
             /* Brand & Accent Tokens */
             --teal: #0d9488;
             --teal-bright: #14b8a6;
-            --teal-subtle: rgba(13, 148, 136, 0.15);
+            --teal-subtle: rgba(13, 148, 136, 0.12);
             --gold: #f59e0b;
             --gold-bright: #fbbf24;
-            --gold-subtle: rgba(245, 158, 11, 0.14);
+            --gold-subtle: rgba(245, 158, 11, 0.12);
 
             /* Status Signals */
             --ok: #10b981;
-            --ok-subtle: rgba(16, 185, 129, 0.14);
+            --ok-subtle: rgba(16, 185, 129, 0.12);
             --danger: #ef4444;
-            --danger-subtle: rgba(239, 68, 68, 0.14);
+            --danger-subtle: rgba(239, 68, 68, 0.12);
             --warn: #f59e0b;
-            --warn-subtle: rgba(245, 158, 11, 0.14);
-            --info: #38bdf8;
-            --info-subtle: rgba(56, 189, 248, 0.14);
+            --warn-subtle: rgba(245, 158, 11, 0.12);
 
             /* Radii & Shadows */
             --radius-sm: 6px;
             --radius-md: 10px;
             --radius-lg: 14px;
-            --radius-xl: 18px;
-            --shadow-subtle: 0 4px 12px rgba(0, 0, 0, 0.35);
         }
 
-        /* Base Streamlit Overrides */
+        /* Base Streamlit App Overrides */
         .stApp {
             background-color: var(--canvas);
             color: var(--text-primary);
@@ -102,81 +97,62 @@ def inject_css() -> None:
             letter-spacing: -0.02em;
         }
 
-        /* Sidebar Styling */
+        /* ChatGPT-style Sidebar Styling */
         section[data-testid="stSidebar"] {
             background-color: #0d131f;
             border-right: 1px solid var(--line);
         }
 
         section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {
-            gap: 0.6rem;
+            gap: 0.5rem;
         }
 
-        /* Professional Header Card */
-        .hiq-hero {
-            border: 1px solid var(--line);
-            border-radius: var(--radius-lg);
-            padding: 22px 26px;
-            background: linear-gradient(145deg, #111827 0%, #0d1422 100%);
-            box-shadow: var(--shadow-subtle);
-            margin-bottom: 20px;
-            position: relative;
+        /* Welcome Hero */
+        .chatgpt-hero {
+            text-align: center;
+            max-width: 720px;
+            margin: 28px auto 24px auto;
         }
 
-        .hiq-hero .eyebrow {
-            color: var(--teal-bright);
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            font-size: 0.72rem;
+        .chatgpt-hero h1 {
+            font-size: 2.3rem;
             font-weight: 700;
-            margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .hiq-hero h1 {
+            letter-spacing: -0.03em;
             margin: 0 0 6px 0;
-            font-size: 1.85rem;
-            font-weight: 700;
             color: #ffffff;
-            letter-spacing: -0.025em;
         }
 
-        .hiq-hero p {
+        .chatgpt-hero .tagline {
+            color: var(--teal-bright);
+            font-size: 0.98rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .chatgpt-hero p {
             color: var(--text-muted);
+            font-size: 1.02rem;
+            line-height: 1.6;
             margin: 0;
-            font-size: 0.95rem;
-            line-height: 1.55;
-            max-width: 960px;
         }
 
-        /* Standard Surface Card */
+        /* Clean Card Surfaces */
         .hiq-card {
             border: 1px solid var(--line);
             border-radius: var(--radius-md);
             padding: 18px 22px;
             background-color: var(--panel);
             margin-bottom: 16px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
-        .hiq-card-elevated {
-            border: 1px solid var(--line-strong);
-            border-radius: var(--radius-md);
-            padding: 20px 24px;
-            background-color: var(--panel-elevated);
-            margin-bottom: 16px;
-        }
-
-        /* Executive Winner Card */
         .hiq-winner {
             border: 1px solid rgba(245, 158, 11, 0.4);
             background: linear-gradient(145deg, rgba(245, 158, 11, 0.08) 0%, rgba(13, 148, 136, 0.04) 100%), #111827;
             border-radius: var(--radius-lg);
             padding: 24px 28px;
             margin-bottom: 22px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
         }
 
         .hiq-winner .label {
@@ -195,7 +171,7 @@ def inject_css() -> None:
             color: #ffffff;
         }
 
-        /* Status Pills & Badges */
+        /* Status Badges */
         .hiq-pill {
             display: inline-flex;
             align-items: center;
@@ -240,36 +216,6 @@ def inject_css() -> None:
             border-color: rgba(245, 158, 11, 0.35);
         }
 
-        .hiq-pill.info {
-            color: var(--info);
-            background: var(--info-subtle);
-            border-color: rgba(56, 189, 248, 0.3);
-        }
-
-        /* Professional Metric Boxes */
-        div[data-testid="stMetric"] {
-            background-color: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: var(--radius-md);
-            padding: 14px 18px;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-        }
-
-        div[data-testid="stMetricLabel"] {
-            color: var(--text-muted);
-            font-size: 0.82rem;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-
-        div[data-testid="stMetricValue"] {
-            color: #ffffff;
-            font-size: 1.55rem;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-        }
-
         /* Buttons — Teal Primary Accent */
         .stButton > button[kind="primary"], .stButton > button[type="primary"] {
             border-radius: var(--radius-sm);
@@ -280,17 +226,15 @@ def inject_css() -> None:
             letter-spacing: -0.01em;
             padding: 8px 18px;
             transition: all 0.15s ease-in-out;
-            box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25);
         }
 
         .stButton > button[kind="primary"]:hover, .stButton > button[type="primary"]:hover {
             background: linear-gradient(180deg, #14b8a6 0%, #0d9488 100%);
             border-color: #2dd4bf;
             color: #ffffff;
-            box-shadow: 0 4px 12px rgba(20, 184, 166, 0.35);
         }
 
-        /* Secondary / Default Buttons */
+        /* Secondary Buttons */
         .stButton > button:not([kind="primary"]):not([type="primary"]),
         .stDownloadButton > button {
             border-radius: var(--radius-sm);
@@ -308,18 +252,35 @@ def inject_css() -> None:
             background: var(--panel-elevated);
         }
 
-        /* Form Inputs & Selectboxes */
-        div[data-baseweb="input"], div[data-baseweb="textarea"], div[data-baseweb="select"] {
-            border-radius: var(--radius-sm) !important;
-            background-color: #0c131f !important;
-            border-color: var(--line-strong) !important;
+        /* Progress Bar & Stepper */
+        div[data-testid="stProgress"] > div > div > div > div {
+            background: linear-gradient(90deg, #0d9488 0%, #14b8a6 100%);
         }
 
-        /* Tabs — Crisp Modern Outline */
+        /* Metric Boxes */
+        div[data-testid="stMetric"] {
+            background-color: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+        }
+
+        div[data-testid="stMetricLabel"] {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+
+        div[data-testid="stMetricValue"] {
+            color: #ffffff;
+            font-size: 1.45rem;
+            font-weight: 700;
+        }
+
+        /* Tabs */
         .stTabs [data-baseweb="tab-list"] {
             gap: 4px;
             border-bottom: 1px solid var(--line);
-            padding-bottom: 4px;
             margin-bottom: 16px;
         }
 
@@ -330,13 +291,6 @@ def inject_css() -> None:
             padding: 8px 14px;
             color: var(--text-muted);
             font-weight: 500;
-            font-size: 0.9rem;
-            transition: all 0.12s ease;
-        }
-
-        .stTabs [data-baseweb="tab"]:hover {
-            color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.03);
         }
 
         .stTabs [aria-selected="true"] {
@@ -353,60 +307,6 @@ def inject_css() -> None:
             background-color: rgba(17, 24, 39, 0.7);
             margin-bottom: 12px;
         }
-
-        /* Dataframes & Tables */
-        div[data-testid="stDataFrame"] {
-            border: 1px solid var(--line);
-            border-radius: var(--radius-md);
-            overflow: hidden;
-        }
-
-        /* Code & Monospace */
-        code {
-            font-family: 'JetBrains Mono', Consolas, monospace;
-            color: #5eead4;
-            background-color: rgba(13, 148, 136, 0.12);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.88em;
-        }
-
-        /* Agent Pipeline Cards */
-        .hiq-agent-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin: 16px 0;
-        }
-
-        .hiq-agent-card {
-            border: 1px solid var(--line);
-            border-radius: var(--radius-md);
-            padding: 14px 16px;
-            background: var(--panel);
-            transition: border-color 0.15s ease;
-        }
-
-        .hiq-agent-card.running {
-            border-color: var(--teal);
-            background: linear-gradient(145deg, rgba(13, 148, 136, 0.08), var(--panel));
-        }
-
-        .hiq-agent-card.completed {
-            border-color: rgba(16, 185, 129, 0.4);
-        }
-
-        /* Empty State */
-        .hiq-empty {
-            border: 1px dashed var(--line-strong);
-            border-radius: var(--radius-lg);
-            padding: 42px 30px;
-            text-align: center;
-            background-color: rgba(17, 24, 39, 0.4);
-            margin: 20px 0;
-        }
-        .hiq-empty h3 { margin: 8px 0 4px 0; color: #ffffff; }
-        .hiq-empty p { color: var(--text-muted); font-size: 0.92rem; max-width: 520px; margin: 0 auto 16px auto; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -414,51 +314,40 @@ def inject_css() -> None:
 
 
 def hero(title: str, subtitle: str, eyebrow: str = "HackathonIQ", badge_text: str | None = None) -> None:
-    """Render a consistent, clean page hero header."""
+    """Render a consistent page hero header."""
     badge_html = f'<span class="hiq-pill teal" style="margin-left:8px;">{badge_text}</span>' if badge_text else ""
     st.markdown(
         f"""
-        <div class="hiq-hero">
-            <div class="eyebrow">{eyebrow}{badge_html}</div>
-            <h1>{title}</h1>
-            <p>{subtitle}</p>
+        <div style="border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 12px; padding: 20px 24px; background: #111827; margin-bottom: 18px;">
+            <div style="color: #14b8a6; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 4px;">
+                {eyebrow}{badge_html}
+            </div>
+            <h1 style="font-size: 1.75rem; font-weight: 700; color: #ffffff; margin: 0 0 6px 0;">{title}</h1>
+            <p style="color: #94a3b8; font-size: 0.95rem; line-height: 1.5; margin: 0;">{subtitle}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def page_header(
-    title: str,
-    subtitle: str,
-    eyebrow: str = "HackathonIQ",
-    badge_text: str | None = None,
-) -> None:
-    """Alias for hero with identical contract."""
+def page_header(title: str, subtitle: str, eyebrow: str = "HackathonIQ", badge_text: str | None = None) -> None:
     hero(title, subtitle, eyebrow=eyebrow, badge_text=badge_text)
 
 
-def empty_state(
-    title: str,
-    description: str,
-    icon: str = "◈",
-    cta_label: str | None = None,
-    cta_page: str | None = None,
-) -> None:
-    """Render a reassuring empty state with optional primary navigation CTA."""
+def empty_state(title: str, description: str, icon: str = "◈", cta_label: str | None = None, cta_page: str | None = None) -> None:
     st.markdown(
         f"""
-        <div class="hiq-empty">
-            <div style="font-size: 2.2rem; color: #94a3b8; margin-bottom: 4px;">{icon}</div>
-            <h3>{title}</h3>
-            <p>{description}</p>
+        <div style="border: 1px dashed rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 36px 24px; text-align: center; background: rgba(17, 24, 39, 0.4); margin: 20px 0;">
+            <div style="font-size: 2rem; color: #94a3b8; margin-bottom: 6px;">{icon}</div>
+            <h3 style="color: #ffffff; margin: 4px 0 6px 0;">{title}</h3>
+            <p style="color: #94a3b8; font-size: 0.92rem; max-width: 500px; margin: 0 auto 14px auto;">{description}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
     if cta_label and cta_page:
-        col_pad1, col_btn, col_pad2 = st.columns([2, 1, 2])
-        with col_btn:
+        col_p1, col_b, col_p2 = st.columns([2, 1, 2])
+        with col_b:
             if st.button(cta_label, type="primary", use_container_width=True, key=f"empty_cta_{cta_page}"):
                 navigate_to(cta_page)
 
@@ -485,26 +374,16 @@ def ollama_banner() -> dict:
     health = get_llm().health()
     if not health.get("available"):
         st.error(
-            "Ollama is not reachable at "
-            f"`{health.get('base_url')}`. Start Ollama on your system, "
-            "then refresh this page."
-        )
-        st.code("winget install Ollama.Ollama\nollama pull qwen2.5:7b", language="powershell")
-    elif not health.get("models"):
-        st.warning(
-            "Ollama is running but no model is installed. Use **Settings → Model** "
-            "to download the configured model (disk space is checked first)."
+            "Ollama is offline. Start the Ollama server on your system, then refresh this page."
         )
     return health
 
 
 def badge(text: str, kind: str = "") -> str:
-    """Return an HTML status badge string."""
     return f'<span class="hiq-pill {kind}">{text}</span>'
 
 
 def status_pill(text: str, kind: str = "") -> str:
-    """Alias for badge."""
     return badge(text, kind)
 
 

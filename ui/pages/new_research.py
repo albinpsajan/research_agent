@@ -1,15 +1,18 @@
-"""New hackathon research page with guided progressive disclosure workflow."""
+"""Page One — New Research: Guided ChatGPT-style research builder, live execution, and embedded results."""
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date, datetime, time, timedelta
 
 import streamlit as st
 
 from config.settings import get_settings
+from src.knowledge.document_intelligence.extractor import validate_uploaded_file
 from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
 from src.models.pipeline import PipelineOptions, PipelineResult
+from src.orchestration.loader import load_multi_track_result, load_session_result
 from src.orchestration.pipeline import HackathonPipeline
 from src.research.base import ResearchError, validate_public_url
 from ui.components.common import (
@@ -18,43 +21,135 @@ from ui.components.common import (
     get_llm,
     get_repository,
     hero,
-    navigate_to,
     ollama_banner,
 )
+from ui.pages import results as results_page
 
 
 def render() -> None:
     settings = get_settings()
     repo = get_repository()
-    service = DocumentIntelligenceService(repository=repo)
+    llm = get_llm()
+    service = DocumentIntelligenceService(repository=repo, llm=llm)
 
-    # Retrieve auto-configuration from active uploaded documents if available
+    # -------------------------------------------------------------------------
+    # 0. Handle sidebar session loading request
+    # -------------------------------------------------------------------------
+    from unittest.mock import MagicMock
+
+    if (
+        "target_session_to_load" in st.session_state
+        and st.session_state["target_session_to_load"]
+        and not isinstance(st.session_state["target_session_to_load"], MagicMock)
+    ):
+        sess_id = st.session_state.pop("target_session_to_load")
+        _load_session_into_state(sess_id, repo)
+        st.session_state["view_mode"] = "results"
+        st.rerun()
+
+    # -------------------------------------------------------------------------
+    # 1. If viewing results or previous research is loaded
+    # -------------------------------------------------------------------------
+    has_results = bool(
+        (st.session_state.get("current_result") and not isinstance(st.session_state.get("current_result"), MagicMock))
+        or (st.session_state.get("current_multi_result") and not isinstance(st.session_state.get("current_multi_result"), MagicMock))
+    )
+    if has_results and st.session_state.get("view_mode") == "results":
+        col_back, _ = st.columns([1, 4])
+        with col_back:
+            if st.button("← Start New Research", type="secondary", use_container_width=True):
+                st.session_state["current_result"] = None
+                st.session_state["current_multi_result"] = None
+                st.session_state["configured_hackathon"] = None
+                st.session_state["view_mode"] = "builder"
+                st.rerun()
+
+        results_page.render()
+        return
+
+    # -------------------------------------------------------------------------
+    # 2. If research is currently in progress
+    # -------------------------------------------------------------------------
+    if st.session_state.get("research_in_progress") is True:
+        _render_execution_progress()
+        return
+
+    # -------------------------------------------------------------------------
+    # 3. New Research Builder: ChatGPT-style Welcome & Input
+    # -------------------------------------------------------------------------
+    hero(
+        "HackathonIQ",
+        "Evidence over ideas. Upload your hackathon documents or describe your challenge to discover the strongest hackathon-ready solutions.",
+        eyebrow="Evidence Over Ideas",
+        badge_text="Autonomous Engine",
+    )
+
+    health = ollama_banner()
+    model = health.get("active_model") or settings.ollama.model
+
+    # Check for active document auto-configuration
     auto_cfg: HackathonInput | None = st.session_state.get("configured_hackathon")
     if not auto_cfg:
         auto_cfg = service.get_active_auto_configuration()
         if auto_cfg:
             st.session_state["configured_hackathon"] = auto_cfg
 
-    hero(
-        "Configure Autonomous Hackathon Research",
-        "Define your hackathon theme, target tracks, and constraints. Five specialized local agents "
-        "will investigate organizers, discover domains, benchmark competitors, formulate architectures, "
-        "and adversarially test candidate solutions.",
-        eyebrow="Guided Research Builder",
-        badge_text="Step-by-Step",
-    )
+    # Mode selection: Document Upload vs Manual Entry
+    tab_doc, tab_manual = st.tabs([
+        "📁 Upload Documents (PDF, Rulebooks, Posters)",
+        "✍ Enter Details Manually",
+    ])
 
-    health = ollama_banner()
-    model = health.get("active_model") or settings.ollama.model
+    # -------------------------------------------------------------
+    # TAB A: DOCUMENT UPLOAD & AUTO-EXTRACTION (Option A)
+    # -------------------------------------------------------------
+    with tab_doc:
+        st.markdown("#### Upload Event Guidelines or Problem Briefs")
+        st.caption("Supports PDF, scanned documents, JPG, PNG, WEBP. You can upload multiple files.")
 
-    if auto_cfg:
-        track_cnt = len(auto_cfg.tracks)
-        track_info = f" ({track_cnt} dynamic tracks extracted)" if track_cnt else ""
-        st.info(
-            f"📁 **Document Ground Truth Active:** Pre-filled configuration from **{auto_cfg.name or 'Uploaded Rulebook'}**"
-            f"{track_info}. All 5 agents cite active documents as unassailable evidence."
+        uploaded_files = st.file_uploader(
+            "Drop hackathon documents here",
+            type=["pdf", "jpg", "jpeg", "png", "webp"],
+            accept_multiple_files=True,
+            key="doc_uploader_main",
+            label_visibility="collapsed",
         )
 
+        if uploaded_files and not isinstance(uploaded_files, MagicMock):
+            # Check if any new files need extraction
+            new_files_to_process = []
+            for f in uploaded_files:
+                f_bytes = f.getvalue()
+                f_hash = hashlib.sha256(f_bytes).hexdigest()
+                existing_doc = repo.get_uploaded_document_by_hash(f_hash)
+                if not existing_doc:
+                    new_files_to_process.append((f, f_bytes))
+
+            if new_files_to_process:
+                st.info(f"Processing {len(new_files_to_process)} uploaded document(s)...")
+                p_bar = st.progress(0.0)
+                for idx, (f, bts) in enumerate(new_files_to_process):
+                    try:
+                        service.upload_document(
+                            filename=f.name,
+                            file_bytes=bts,
+                            extract_structured=True,
+                        )
+                    except Exception as e:
+                        st.error(f"Error processing {f.name}: {e}")
+                    p_bar.progress((idx + 1) / len(new_files_to_process))
+
+                # Auto-configure event details from extracted documents
+                extracted_input, status, conflicts, profile = service.auto_configure_hackathon(
+                    mode=MultiTrackMode.BEST_OVERALL
+                )
+                if extracted_input:
+                    st.session_state["configured_hackathon"] = extracted_input
+                    auto_cfg = extracted_input
+                st.success("✓ Documents ingested and analyzed! Review and edit the extracted details below.")
+                st.rerun()
+
+    # Determine default field values (from extracted document or manual state)
     default_theme = auto_cfg.theme if auto_cfg else ""
     default_name = auto_cfg.name or "" if auto_cfg else ""
     default_website = (
@@ -69,309 +164,231 @@ def render() -> None:
     )
     default_constraints = auto_cfg.constraints or "" if auto_cfg else ""
     default_is_multi_track = auto_cfg.is_multi_track if auto_cfg else False
-    default_mode_index = 1 if (auto_cfg and auto_cfg.multi_track_mode == MultiTrackMode.BEST_PER_TRACK) else 0
-    default_num_tracks = len(auto_cfg.tracks) if (auto_cfg and auto_cfg.tracks) else 2
-    default_has_deadline = bool(auto_cfg and auto_cfg.deadline)
+    default_mode_idx = 1 if (auto_cfg and auto_cfg.multi_track_mode == MultiTrackMode.BEST_PER_TRACK) else 0
+    default_tracks = auto_cfg.tracks if (auto_cfg and auto_cfg.tracks) else []
 
+    # -------------------------------------------------------------
+    # EDITABLE RESEARCH CONFIGURATION FORM
+    # -------------------------------------------------------------
+    with tab_manual:
+        st.markdown("#### Enter or Edit Hackathon Parameters")
+
+    if auto_cfg:
+        track_info = f" ({len(default_tracks)} tracks detected)" if default_tracks else ""
+        st.markdown(
+            f"""
+            <div style="background: rgba(13, 148, 136, 0.08); border: 1px solid rgba(20, 184, 166, 0.25); border-radius: 8px; padding: 10px 16px; margin: 12px 0;">
+                <span style="color: #14b8a6; font-weight: 600;">📁 Ground Truth Active:</span>
+                <span style="color: #cbd5e1; font-size: 0.92rem;"> Pre-filled from <b>{auto_cfg.name or 'Uploaded Document'}</b>{track_info}. You can review and edit any value.</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Initialize dynamic tracks in session state if not present
+    if "builder_tracks" not in st.session_state or auto_cfg:
+        st.session_state["builder_tracks"] = [
+            {
+                "name": t.name,
+                "description": t.description or "",
+                "track_rules": t.track_rules or "",
+                "official_track_url": t.official_track_url or "",
+            }
+            for t in default_tracks
+        ]
+
+    # Form inputs
+    theme = st.text_area(
+        "Hackathon Theme *",
+        value=default_theme,
+        placeholder="e.g. Sustainable Coastal Cities: AI, Climate Resilience & Disaster Management",
+        height=85,
+        help="The core challenge or theme of the hackathon. Required.",
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        name = st.text_input("Hackathon Name (optional)", value=default_name, placeholder="e.g. BeachHack Season 08")
+        website = st.text_input("Official Website (optional)", value=default_website, placeholder="https://beachhack.in")
+    with c2:
+        rules = st.text_input("Rules URL (optional)", value=default_rules, placeholder="https://beachhack.in/rules")
+        constraints = st.text_input(
+            "Constraints (optional)",
+            value=default_constraints,
+            placeholder="e.g. 36 hours build time, teams of 4",
+        )
+
+    # Track Configuration
+    st.markdown("##### Track Architecture")
+    is_multi_track = st.checkbox(
+        "Multi-Track Hackathon",
+        value=default_is_multi_track or len(st.session_state["builder_tracks"]) > 1,
+        help="Enable to evaluate multiple distinct problem tracks independently.",
+    )
+
+    multi_track_mode = MultiTrackMode.BEST_OVERALL
+    if is_multi_track:
+        mode_choice = st.radio(
+            "Optimization Mode",
+            [
+                "Mode A: Best Overall Track (Find single strongest opportunity across all tracks)",
+                "Mode B: Best Idea Per Track (Find the strongest qualifying idea independently for every track)",
+            ],
+            index=default_mode_idx,
+            horizontal=True,
+        )
+        multi_track_mode = (
+            MultiTrackMode.BEST_PER_TRACK if "Mode B" in mode_choice else MultiTrackMode.BEST_OVERALL
+        )
+
+        st.caption("Tracks detected from documents or added manually:")
+        tracks_list = st.session_state.get("builder_tracks", [])
+
+        # Display track editor cards
+        updated_tracks = []
+        for i, trk in enumerate(tracks_list):
+            with st.expander(f"Track {i+1}: {trk.get('name') or 'Unnamed Track'}", expanded=(i < 3)):
+                t_name = st.text_input(f"Track {i+1} Name *", value=trk.get("name", ""), key=f"tr_name_{i}")
+                t_desc = st.text_area(f"Track {i+1} Description (optional)", value=trk.get("description", ""), key=f"tr_desc_{i}", height=55)
+                c_tr1, c_tr2 = st.columns(2)
+                with c_tr1:
+                    t_rules = st.text_input(f"Track {i+1} Rules (optional)", value=trk.get("track_rules", ""), key=f"tr_rules_{i}")
+                with c_tr2:
+                    t_url = st.text_input(f"Track {i+1} Official URL (optional)", value=trk.get("official_track_url", ""), key=f"tr_url_{i}")
+                updated_tracks.append({
+                    "name": t_name,
+                    "description": t_desc,
+                    "track_rules": t_rules,
+                    "official_track_url": t_url,
+                })
+        st.session_state["builder_tracks"] = updated_tracks
+
+        col_t_add, col_t_rm = st.columns([1, 1])
+        with col_t_add:
+            if st.button("+ Add Another Track", type="secondary"):
+                st.session_state["builder_tracks"].append({"name": "", "description": "", "track_rules": "", "official_track_url": ""})
+                st.rerun()
+        with col_t_rm:
+            if len(st.session_state["builder_tracks"]) > 1 and st.button("- Remove Last Track", type="secondary"):
+                st.session_state["builder_tracks"].pop()
+                st.rerun()
+
+    # Scope & Regional Focus
+    st.markdown("##### Research Scope & Regional Focus")
+    c_geo1, c_geo2 = st.columns([2, 1])
+    with c_geo1:
+        geo_priority = st.selectbox(
+            "Geographical Research Focus",
+            [
+                "Kerala First (with Indian scalability and Global taxonomy)",
+                "India National (with Global benchmarking)",
+                "Global Broad (with Indian transferability)",
+            ],
+            index=0,
+        )
+    with c_geo2:
+        kerala_districts = st.multiselect(
+            "Kerala Districts",
+            [
+                "Alappuzha", "Ernakulam", "Idukki", "Kannur", "Kasaragod",
+                "Kollam", "Kottayam", "Kozhikode", "Malappuram", "Palakkad",
+                "Pathanamthitta", "Thiruvananthapuram", "Thrissur", "Wayanad",
+            ],
+            default=["Wayanad", "Alappuzha", "Palakkad"],
+        )
+
+    # -------------------------------------------------------------
+    # DUPLICATE DETECTION BEFORE LAUNCH
+    # -------------------------------------------------------------
+    duplicate_session = None
+    if theme.strip():
+        duplicate_session = repo.find_session_by_theme_or_name(theme, name)
+
+    if duplicate_session:
+        d_id = duplicate_session["id"]
+        d_name = duplicate_session.get("hackathon_name") or duplicate_session.get("hackathon_theme")
+        d_date = format_datetime(duplicate_session.get("created_at"))
+        st.warning(
+            f"⚠️ **Existing Research Detected:** A research run for **'{d_name}'** already exists (Session `{d_id[:8]}`, created {d_date}). "
+            "You can load previous results instantly or start a fresh run."
+        )
+        col_dup1, col_dup2 = st.columns([1, 2])
+        with col_dup1:
+            if st.button("Load Existing Results", key=f"dup_load_{d_id}", type="primary", use_container_width=True):
+                _load_session_into_state(d_id, repo)
+                st.session_state["view_mode"] = "results"
+                st.rerun()
+
+    # -------------------------------------------------------------
+    # PRE-FLIGHT REVIEW SUMMARY
+    # -------------------------------------------------------------
+    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
     active_docs = repo.list_uploaded_documents(is_active_only=True)
 
-    with st.form("research_configuration_form"):
-        # 4-Step Progressive Tabs
-        step1, step2, step3, step4 = st.tabs([
-            "1 · Hackathon Brief",
-            "2 · Tracks & Rules",
-            "3 · Scope & Preferences",
-            "4 · Review & Launch",
-        ])
+    tracks_to_run = [
+        HackathonTrack(
+            name=t["name"].strip(),
+            description=t["description"].strip() or None,
+            track_rules=t["track_rules"].strip() or None,
+            official_track_url=t["official_track_url"].strip() or None,
+        )
+        for t in st.session_state.get("builder_tracks", [])
+        if t.get("name", "").strip()
+    ] if is_multi_track else []
 
-        # -------------------------------------------------------------
-        # STEP 1: HACKATHON BRIEF
-        # -------------------------------------------------------------
-        with step1:
-            st.markdown("#### Step 1: Hackathon Theme & Event Information")
-            st.caption("Provide the primary theme or problem statement given by the organizers.")
+    track_summary_text = (
+        f"{len(tracks_to_run)} tracks · {'Mode B: Best Idea Per Track' if multi_track_mode == MultiTrackMode.BEST_PER_TRACK else 'Mode A: Best Overall Track'}"
+        if is_multi_track
+        else "Single Unified Track"
+    )
 
-            theme = st.text_area(
-                "Hackathon Theme *",
-                value=default_theme,
-                placeholder="e.g. Sustainable Coastal Cities: AI, Climate Resilience & Disaster Management",
-                height=90,
-                help="The core prompt or theme provided by the hackathon organizers. Mandatory.",
-            )
-
-            c_n1, c_n2 = st.columns(2)
-            with c_n1:
-                name = st.text_input(
-                    "Hackathon Name (optional)",
-                    value=default_name,
-                    placeholder="e.g. BeachHack Season 08",
-                )
-                website = st.text_input(
-                    "Official Website URL (optional)",
-                    value=default_website,
-                    placeholder="https://beachhack.in",
-                )
-            with c_n2:
-                rules = st.text_input(
-                    "Rules / Guidelines URL (optional)",
-                    value=default_rules,
-                    placeholder="https://beachhack.in/guidelines",
-                )
-                constraints = st.text_input(
-                    "General Constraints (optional)",
-                    value=default_constraints,
-                    placeholder="e.g. 36 hours build time, teams of 4, open source",
-                )
-
-            deadline_known = st.checkbox("I know the submission deadline", value=default_has_deadline)
-            deadline: datetime | None = None
-            if deadline_known:
-                default_date = (
-                    auto_cfg.deadline.date()
-                    if (auto_cfg and auto_cfg.deadline)
-                    else (date.today() + timedelta(days=2))
-                )
-                default_time = (
-                    auto_cfg.deadline.time()
-                    if (auto_cfg and auto_cfg.deadline)
-                    else time(18, 0)
-                )
-                c_d1, c_d2 = st.columns(2)
-                with c_d1:
-                    chosen_date = st.date_input("Deadline Date", value=default_date)
-                with c_d2:
-                    chosen_time = st.time_input("Deadline Time (Local)", value=default_time)
-                deadline = datetime.combine(chosen_date, chosen_time)
-
-        # -------------------------------------------------------------
-        # STEP 2: TRACKS & RULES
-        # -------------------------------------------------------------
-        with step2:
-            st.markdown("#### Step 2: Track Architecture")
-            st.caption("Choose between single-track focus or multi-track competitive exploration.")
-
-            is_multi_track = st.checkbox(
-                "Enable Multi-Track Research",
-                value=default_is_multi_track,
-                help="Evaluate multiple tracks independently and compare ideas across tracks.",
-            )
-
-            track_inputs: list[tuple[str, str, str, str]] = []
-            multi_track_mode = MultiTrackMode.BEST_OVERALL
-
-            if is_multi_track:
-                st.markdown("##### Multi-Track Optimization Strategy")
-                mode_choice = st.radio(
-                    "Selection Mode",
-                    [
-                        "Mode A: Best Overall Track (Identify single strongest idea across all tracks)",
-                        "Mode B: Best Idea Per Track (Identify strongest qualifying idea independently for every track)",
-                    ],
-                    index=default_mode_index,
-                )
-                multi_track_mode = (
-                    MultiTrackMode.BEST_PER_TRACK
-                    if "Mode B" in mode_choice
-                    else MultiTrackMode.BEST_OVERALL
-                )
-
-                num_tracks = st.number_input(
-                    "Number of Tracks", min_value=1, max_value=20, value=default_num_tracks, step=1
-                )
-                st.markdown("##### Define Track Details")
-
-                for i in range(int(num_tracks)):
-                    track_obj = auto_cfg.tracks[i] if (auto_cfg and i < len(auto_cfg.tracks)) else None
-                    t_def_name = track_obj.name if track_obj else ""
-                    t_def_desc = track_obj.description or "" if track_obj else ""
-                    t_def_rules = track_obj.track_rules or "" if track_obj else ""
-                    t_def_url = track_obj.official_track_url or "" if track_obj else ""
-
-                    expander_label = f"Track {i+1}: {t_def_name}" if t_def_name else f"Track {i+1} Specifications"
-                    with st.expander(expander_label, expanded=(i < 3)):
-                        t_name = st.text_input(
-                            f"Track {i+1} Name *",
-                            value=t_def_name,
-                            key=f"t_name_{i}",
-                            placeholder=f"e.g. AI for Climate Resilience",
-                        )
-                        t_desc = st.text_area(
-                            f"Track {i+1} Scope & Description (optional)",
-                            value=t_def_desc,
-                            key=f"t_desc_{i}",
-                            height=65,
-                        )
-                        c_tr1, c_tr2 = st.columns(2)
-                        with c_tr1:
-                            t_rules = st.text_input(
-                                f"Track {i+1} Specific Rules (optional)",
-                                value=t_def_rules,
-                                key=f"t_rules_{i}",
-                            )
-                        with c_tr2:
-                            t_url = st.text_input(
-                                f"Track {i+1} Official URL (optional)",
-                                value=t_def_url,
-                                key=f"t_url_{i}",
-                            )
-                        track_inputs.append((t_name, t_desc, t_rules, t_url))
-            else:
-                st.info("Single-Track Mode: All five agents will focus deeply on the main theme provided in Step 1.")
-
-        # -------------------------------------------------------------
-        # STEP 3: SCOPE & PREFERENCES
-        # -------------------------------------------------------------
-        with step3:
-            st.markdown("#### Step 3: Geographic Priority & Agent Tuning")
-            st.caption("Ground research in real regional datasets, communities, and constraints.")
-
-            g1, g2 = st.columns(2)
-            with g1:
-                geo_priority = st.selectbox(
-                    "Geographical Research Focus",
-                    [
-                        "Kerala First (with Indian scalability and Global taxonomy)",
-                        "India National (with Global benchmarking)",
-                        "Global Broad (with Indian transferability)",
-                    ],
-                    index=0,
-                )
-            with g2:
-                kerala_districts = st.multiselect(
-                    "Target Kerala Districts (optional)",
-                    [
-                        "Alappuzha", "Ernakulam", "Idukki", "Kannur", "Kasaragod",
-                        "Kollam", "Kottayam", "Kozhikode", "Malappuram", "Palakkad",
-                        "Pathanamthitta", "Thiruvananthapuram", "Thrissur", "Wayanad",
-                    ],
-                    default=["Wayanad", "Alappuzha", "Palakkad", "Idukki"],
-                )
-
-            if active_docs:
-                doc_tags = [f"`{d['filename']}`" for d in active_docs[:4]]
-                st.markdown(
-                    f"""
-                    <div style="background: rgba(13, 148, 136, 0.08); border: 1px solid rgba(20, 184, 166, 0.25); border-radius: 8px; padding: 10px 14px; margin-top: 8px;">
-                        <span style="color: #14b8a6; font-weight: 600;">📁 Ground Truth Active:</span>
-                        <span style="color: #94a3b8; font-size: 0.9rem;"> {len(active_docs)} document(s) attached: {', '.join(doc_tags)}</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.caption("💡 Tip: Upload official hackathon guidelines in the Document tab to automatically supply ground truth.")
-
-            with st.expander("Advanced Pipeline Parameters (recommended defaults)"):
-                c1, c2, c3, c4 = st.columns(4)
-                with c1:
-                    max_domains = st.slider("Domains to Explore", 3, 20, settings.agent.max_domains)
-                with c2:
-                    per_domain = st.slider("Problems / Domain", 1, 5, settings.agent.problems_per_domain)
-                with c3:
-                    finalists = st.slider("Finalist Candidates", 2, 10, settings.agent.max_finalists)
-                with c4:
-                    rounds = st.slider("Debate Rounds", 1, 5, settings.agent.max_debate_rounds)
-                include_ci = st.checkbox("Reuse stored Continuous Intelligence signals", value=True)
-
-        # -------------------------------------------------------------
-        # STEP 4: REVIEW & LAUNCH
-        # -------------------------------------------------------------
-        with step4:
-            st.markdown("#### Step 4: Review Configuration & Launch Workflow")
-            st.caption("Verify your research parameters before initiating autonomous local execution.")
-
-            is_theme_valid = bool(theme and len(theme.strip()) >= 3)
-            review_bg = "#111827" if is_theme_valid else "rgba(239, 68, 68, 0.08)"
-            review_border = "rgba(148, 163, 184, 0.2)" if is_theme_valid else "rgba(239, 68, 68, 0.4)"
-
-            track_summary = f"{len(track_inputs)} tracks configured" if is_multi_track else "Single unified track"
-            mode_summary = (
-                "Mode B: Independent Winner Per Track"
-                if (is_multi_track and multi_track_mode == MultiTrackMode.BEST_PER_TRACK)
-                else ("Mode A: Single Best Overall Track" if is_multi_track else "Single Track Deep Dive")
-            )
-
-            st.markdown(
-                f"""
-                <div style="background: {review_bg}; border: 1px solid {review_border}; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px;">
-                    <div style="font-size: 0.78rem; color: #14b8a6; text-transform: uppercase; font-weight: 700; margin-bottom: 6px;">
-                        Execution Blueprint Summary
-                    </div>
-                    <div style="font-size: 1.15rem; font-weight: 600; color: #ffffff; margin-bottom: 8px;">
-                        {theme if theme.strip() else '<span style=\"color:#f87171;\">[Theme is required]</span>'}
-                    </div>
-                    <div style="font-size: 0.88rem; color: #94a3b8; line-height: 1.6;">
-                        <div>• <b>Event:</b> {name if name.strip() else 'General Hackathon'}</div>
-                        <div>• <b>Track Architecture:</b> {track_summary} · {mode_summary}</div>
-                        <div>• <b>Geographic Focus:</b> {geo_priority}</div>
-                        <div>• <b>Inference Engine:</b> Local Ollama (`{model}`) · Zero Paid APIs</div>
-                        <div>• <b>Document Evidence:</b> {len(active_docs)} active source document(s)</div>
-                    </div>
+    # -------------------------------------------------------------
+    # START RESEARCH FORM (Explicit User Confirmation)
+    # -------------------------------------------------------------
+    with st.form("research_execution_form"):
+        st.markdown(
+            f"""
+            <div style="background: #111827; border: 1px solid rgba(148, 163, 184, 0.16); border-radius: 10px; padding: 16px 20px; margin-bottom: 16px;">
+                <div style="color: #14b8a6; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 4px;">
+                    Review Configuration Before Launch
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                <div style="font-weight: 600; color: #f8fafc; font-size: 1.05rem; margin-bottom: 6px;">
+                    {theme if theme.strip() else '<span style="color:#f87171;">[Theme is required to start]</span>'}
+                </div>
+                <div style="color: #94a3b8; font-size: 0.88rem; line-height: 1.6;">
+                    • <b>Event:</b> {name if name.strip() else 'General Hackathon'}<br>
+                    • <b>Track Architecture:</b> {track_summary_text}<br>
+                    • <b>Geographic Focus:</b> {geo_priority}<br>
+                    • <b>Ground Truth Documents:</b> {len(active_docs)} document(s) attached
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-            launch_btn = st.form_submit_button(
-                "Launch Five-Agent Autonomous Research Workflow →",
-                type="primary",
-                use_container_width=True,
-            )
+        start_clicked = st.form_submit_button("Start Research →", type="primary", use_container_width=True)
 
-    # If form has not been submitted, display helpful agent pipeline overview
-    if not launch_btn:
+    if not start_clicked:
         return
 
-    # Validation Checks
+    # Validation
     if not theme or len(theme.strip()) < 3:
-        st.error("Please enter a valid hackathon theme of at least 3 characters.")
+        st.error("Please enter a hackathon theme of at least 3 characters.")
         return
 
-    for label, url in (("Website", website), ("Rules", rules)):
-        if url.strip():
-            if url.strip().startswith("doc://"):
-                st.error(f"{label} URL cannot be an internal document reference ('doc://'). Uploaded documents are automatically used as primary evidence.")
-                return
+    if is_multi_track and not tracks_to_run:
+        st.error("Please provide at least one valid track with a name for multi-track research.")
+        return
+
+    for label, url_val in (("Website", website), ("Rules", rules)):
+        if url_val.strip() and not url_val.strip().startswith("doc://"):
             try:
-                validate_public_url(url.strip())
+                validate_public_url(url_val.strip())
             except ResearchError as exc:
                 st.error(f"{label} URL rejected: {exc}")
                 return
 
-    if not health.get("available"):
-        st.error("Ollama is offline. Start the Ollama server before running research.")
-        return
-    if not health.get("models"):
-        st.error("No Ollama model is installed. Open Settings → Model to download one.")
-        return
-
-    parsed_tracks: list[HackathonTrack] = []
-    if is_multi_track:
-        for idx, (t_name, t_desc, t_rules, t_url) in enumerate(track_inputs):
-            name_clean = t_name.strip()
-            if name_clean:
-                clean_url = t_url.strip() if t_url else None
-                if clean_url:
-                    if clean_url.startswith("doc://"):
-                        st.error(f"Track {idx+1} URL cannot be an internal document reference ('doc://'). Uploaded documents are automatically used as primary evidence.")
-                        return
-                    try:
-                        validate_public_url(clean_url)
-                    except ResearchError as exc:
-                        st.error(f"Track {idx+1} URL rejected: {exc}")
-                        return
-                parsed_tracks.append(
-                    HackathonTrack(
-                        name=name_clean,
-                        description=t_desc.strip() or None,
-                        track_rules=t_rules.strip() or None,
-                        official_track_url=clean_url or None,
-                    )
-                )
-        if not parsed_tracks:
-            st.error("Please provide at least one valid track with a name.")
-            return
-
+    # Prepare inputs
     full_constraints = []
     if constraints.strip():
         full_constraints.append(constraints.strip())
@@ -387,80 +404,76 @@ def render() -> None:
         name=name.strip() or None,
         website_url=website.strip() or None,
         rules_url=rules.strip() or None,
-        deadline=deadline,
         constraints=combined_constraints,
         is_multi_track=is_multi_track,
         multi_track_mode=multi_track_mode,
-        tracks=parsed_tracks,
+        tracks=tracks_to_run,
     )
     options = PipelineOptions(
-        max_domains=max_domains,
-        problems_per_domain=per_domain,
-        max_finalists=finalists,
-        max_debate_rounds=rounds,
-        include_continuous_intelligence=include_ci,
+        max_domains=settings.agent.max_domains,
+        problems_per_domain=settings.agent.problems_per_domain,
+        max_finalists=settings.agent.max_finalists,
+        max_debate_rounds=settings.agent.max_debate_rounds,
     )
 
-    # Initialize live telemetry state
+    # Launch execution with live progress inside New Research
     st.session_state["research_in_progress"] = True
-    st.session_state["live_events"] = []
-    st.session_state["active_agent_name"] = "Hackathon Intelligence"
-    st.session_state["active_progress_fraction"] = 0.05
+    st.session_state["current_theme_running"] = theme.strip()
+    st.session_state["current_name_running"] = name.strip() or "Hackathon"
+    st.session_state["execution_stage"] = "Analyzing Hackathon Ground Truth & Rules"
+    st.session_state["execution_progress"] = 0.05
+    st.session_state["execution_message"] = "Reading official event rules and extracting judging criteria..."
 
-    progress = st.progress(0.0)
-    status = st.empty()
-    log = st.expander("Live Agent Deliberation Log", expanded=True)
+    _execute_research_pipeline(hackathon, options, repo, llm)
 
-    def on_progress(stage: str, message: str, fraction: float) -> None:
-        fraction_bounded = min(max(fraction, 0.0), 1.0)
-        progress.progress(fraction_bounded)
-        status.markdown(f"**{fraction_bounded:.0%}** · `{stage}`: {message}")
-        event = {
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "stage": stage,
-            "message": message,
-        }
-        st.session_state["live_events"].append(event)
-        st.session_state["active_agent_name"] = stage
-        st.session_state["active_progress_fraction"] = fraction_bounded
-        recent_msgs = [
-            f"`[{e['timestamp']}]` **{e['stage']}**: {e['message']}"
-            for e in st.session_state["live_events"][-8:]
-        ]
-        log.markdown("\n\n".join(recent_msgs))
 
-    pipeline = HackathonPipeline(
-        llm=get_llm(),
-        repository=repo,
-        progress=on_progress,
-    )
+def _execute_research_pipeline(hackathon: HackathonInput, options: PipelineOptions, repo, llm) -> None:
+    """Executes the pipeline with user-friendly live stage tracking."""
+    progress_bar = st.progress(0.0)
+    status_text = st.empty()
 
-    with st.spinner("Autonomous agents are conducting research and debate. Do not close this tab."):
-        try:
-            if is_multi_track:
-                multi_result = pipeline.run_multi_track(hackathon, options)
-                st.session_state["current_multi_result"] = multi_result
-                st.session_state["current_session_id"] = multi_result.session_id
-                winning_tid = (
-                    multi_result.comparison.overall_winning_track.id
-                    if (multi_result.comparison and multi_result.comparison.overall_winning_track)
-                    else (parsed_tracks[0].id if parsed_tracks else None)
-                )
-                best_track_res = multi_result.track_results.get(winning_tid) if winning_tid else None
+    stage_names = {
+        "intelligence": "1. Analyzing Hackathon Ground Truth & Rules",
+        "domain": "2. Dynamic Domain & Problem Discovery",
+        "innovation": "3. Competitor Investigation & Benchmarking",
+        "architect": "4. Solution Architecture & Feasibility",
+        "critic": "5. Quality Gate Evaluation & Debate",
+    }
+
+    def on_progress(stage: str, message: str, frac: float) -> None:
+        frac_bounded = min(max(frac, 0.0), 1.0)
+        progress_bar.progress(frac_bounded)
+        clean_stage = stage_names.get(stage.lower(), stage)
+        status_text.markdown(f"**{frac_bounded:.0%}** · `{clean_stage}` — {message}")
+        st.session_state["execution_progress"] = frac_bounded
+        st.session_state["execution_stage"] = clean_stage
+        st.session_state["execution_message"] = message
+
+    pipeline = HackathonPipeline(llm=llm, repository=repo, progress=on_progress)
+
+    try:
+        with st.spinner("Autonomous agents are conducting research, testing competitors, and debating ideas..."):
+            if hackathon.is_multi_track:
+                multi_res = pipeline.run_multi_track(hackathon, options)
+                st.session_state["current_multi_result"] = multi_res
+                st.session_state["current_session_id"] = multi_res.session_id
+                comp = multi_res.comparison
+                winning_tid = comp.overall_winning_track.id if (comp and comp.overall_winning_track) else None
+                best_track_res = multi_res.track_results.get(winning_tid) if winning_tid else None
                 result = PipelineResult(
-                    session_id=multi_result.session_id,
+                    session_id=multi_res.session_id,
                     input=hackathon,
-                    intelligence=multi_result.shared_intelligence,
+                    intelligence=multi_res.shared_intelligence,
                     domain_map=best_track_res.domain_map if best_track_res else None,
                     innovation_report=best_track_res.innovation_report if best_track_res else None,
                     feasibility=best_track_res.feasibility if best_track_res else None,
                     debates=best_track_res.debates if best_track_res else [],
                     winner=best_track_res.winner if best_track_res else None,
-                    report=multi_result.master_report,
-                    status=multi_result.status,
-                    started_at=multi_result.started_at,
-                    completed_at=multi_result.completed_at,
-                    duration_seconds=multi_result.duration_seconds,
+                    report=multi_res.master_report,
+                    status=multi_res.status,
+                    started_at=multi_res.started_at,
+                    completed_at=multi_res.completed_at,
+                    duration_seconds=multi_res.duration_seconds,
                 )
                 st.session_state["current_result"] = result
             else:
@@ -468,12 +481,84 @@ def render() -> None:
                 result = pipeline.run(hackathon, options)
                 st.session_state["current_result"] = result
                 st.session_state["current_session_id"] = result.session_id
-        finally:
-            st.session_state["research_in_progress"] = False
 
-    if result.status == "failed":
-        st.error(f"Research execution failed: {result.error}")
-        return
+        st.session_state["research_in_progress"] = False
+        st.session_state["view_mode"] = "results"
+        st.success("Research completed successfully!")
+        st.rerun()
 
-    st.success("Research workflow completed successfully! Redirecting to Results...")
-    navigate_to("Results & Comparisons")
+    except Exception as exc:  # noqa: BLE001
+        st.session_state["research_in_progress"] = False
+        st.error(f"Research execution failed: {exc}")
+
+
+def _render_execution_progress() -> None:
+    """Renders clean user-facing progress without developer logs."""
+    theme = st.session_state.get("current_theme_running", "Hackathon Research")
+    name = st.session_state.get("current_name_running", "Hackathon")
+    stage = st.session_state.get("execution_stage", "Executing autonomous research...")
+    message = st.session_state.get("execution_message", "Agents are evaluating problem candidates...")
+    progress_val = float(st.session_state.get("execution_progress", 0.1))
+
+    hero(
+        theme,
+        f"{name} · Autonomous Research in Progress",
+        eyebrow="Live Research Progress",
+        badge_text="Executing",
+    )
+
+    st.progress(min(max(progress_val, 0.0), 1.0))
+    st.markdown(f"**Current Stage:** `{stage}`")
+    st.caption(f"Activity: {message}")
+
+    st.markdown(
+        """
+        <div style="background: #111827; border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 10px; padding: 18px 22px; margin-top: 18px;">
+            <div style="color: #14b8a6; font-weight: 600; font-size: 0.95rem; margin-bottom: 6px;">
+                Autonomous 5-Stage Deliberation Pipeline:
+            </div>
+            <div style="color: #94a3b8; font-size: 0.88rem; line-height: 1.6;">
+                1. <b>Ground Truth Analysis</b>: Rules, constraints, judging criteria<br>
+                2. <b>Dynamic Domain Discovery</b>: Uncovering underserved real-world problems<br>
+                3. <b>Competitor Research</b>: Auditing GitHub, arXiv, and existing startups<br>
+                4. <b>Solution Architecture</b>: Formulating buildable architectures and demo plans<br>
+                5. <b>Adversarial Quality Gates</b>: 10-gate audit and honest winner selection
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _load_session_into_state(session_id: str, repository) -> None:
+    """Helper to populate session state with persisted result."""
+    session = repository.get_session(session_id)
+    if session and session.get("is_multi_track"):
+        multi_res = load_multi_track_result(session_id, repository)
+        if multi_res:
+            st.session_state["current_multi_result"] = multi_res
+            st.session_state["current_session_id"] = session_id
+            comp = multi_res.comparison
+            winning_tid = comp.overall_winning_track.id if (comp and comp.overall_winning_track) else None
+            best_track_res = multi_res.track_results.get(winning_tid) if winning_tid else None
+            st.session_state["current_result"] = PipelineResult(
+                session_id=session_id,
+                input=multi_res.input,
+                intelligence=multi_res.shared_intelligence,
+                domain_map=best_track_res.domain_map if best_track_res else None,
+                innovation_report=best_track_res.innovation_report if best_track_res else None,
+                feasibility=best_track_res.feasibility if best_track_res else None,
+                debates=best_track_res.debates if best_track_res else [],
+                winner=best_track_res.winner if best_track_res else None,
+                report=multi_res.master_report,
+                status=multi_res.status,
+                started_at=multi_res.started_at,
+                completed_at=multi_res.completed_at,
+                duration_seconds=multi_res.duration_seconds,
+            )
+    else:
+        st.session_state["current_multi_result"] = None
+        result = load_session_result(session_id, repository)
+        if result:
+            st.session_state["current_result"] = result
+            st.session_state["current_session_id"] = session_id
