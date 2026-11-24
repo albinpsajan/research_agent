@@ -103,6 +103,21 @@ def inject_css() -> None:
             border-right: 1px solid var(--line);
         }
 
+        /* Remove Streamlit's automatically generated multi-page sidebar navigation */
+        [data-testid="stSidebarNav"],
+        div[data-testid="stSidebarNav"],
+        nav[data-testid="stSidebarNav"],
+        ul[data-testid="stSidebarNavItems"],
+        header[data-testid="stSidebarNavHeader"],
+        div[data-testid="stSidebarNavSeparator"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            pointer-events: none !important;
+        }
+
         section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {
             gap: 0.5rem;
         }

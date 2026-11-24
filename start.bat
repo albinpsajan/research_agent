@@ -22,7 +22,7 @@ echo.
 echo Starting Streamlit at http://localhost:8501
 echo Press Ctrl+C in this window to stop.
 echo.
-python -m streamlit run ui/app.py --server.port 8501 --browser.gatherUsageStats false
+python -m streamlit run ui/app.py --server.port 8501 --browser.gatherUsageStats false --client.showSidebarNavigation false
 
 if errorlevel 1 (
     echo.
