@@ -65,9 +65,83 @@ def _render_single_track(result: PipelineResult) -> None:
     # -------------------------------------------------------------
     # SECTION A: EXECUTIVE SUMMARY (AT THE VERY TOP)
     # -------------------------------------------------------------
-    if has_winner and ev:
+    exec_status = result.execution_status
+    outcome = result.winner_outcome
+
+    if exec_status == ResearchExecutionStatus.INTERRUPTED:
         st.markdown(
             f"""
+            <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;">
+                <div style="color: #f59e0b; font-weight: 700; font-size: 1.1rem; margin-bottom: 6px;">
+                    Research was interrupted before evaluation could be completed. No final winner decision has been made.
+                </div>
+                <div style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.5;">
+                    Autonomous execution stopped before candidate generation and adversarial quality gate evaluation could conclude.
+                    Available partial discoveries (domains, problem candidates, and market solutions) are preserved and displayed below.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_res, _ = st.columns([1.8, 5.2])
+        with col_res:
+            if st.button("▶ Resume Research", type="primary", use_container_width=True, key=f"res_single_{result.session_id}"):
+                from src.orchestration.background_runner import resume_research_job
+                if resume_research_job(result.session_id):
+                    st.toast("Resuming research from persisted checkpoint! Tracking live progress in History...")
+                    from ui.components.layout import navigate_to
+                    navigate_to("History")
+                    st.rerun()
+                else:
+                    st.error("Could not resume research session. Verify Ollama is running.")
+
+        with st.expander("🔍 Technical Diagnostics & Checkpoint Inspection", expanded=False):
+            st.markdown(
+                f"""
+                - **Session ID:** `{result.session_id}`
+                - **Theme:** {result.input.theme}
+                - **Discovered Domains:** {result.domain_map.total_domains_explored if result.domain_map else 0}
+                - **Problem Statements:** {result.domain_map.total_problems_found if result.domain_map else 0}
+                - **Market Solutions Scouted:** {result.innovation_report.total_solutions_found if result.innovation_report else 0}
+                - **Candidate Solutions Tested:** {len(result.feasibility.candidates) if result.feasibility else 0}
+                - **Gates Evaluated:** {len(result.debates) if result.debates else 0}
+                - **Execution Checkpoint Status:** Safely persisted. Ready to resume next agent stage.
+                """
+            )
+
+    elif exec_status == ResearchExecutionStatus.FAILED:
+        st.markdown(
+            f"""
+            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;">
+                <div style="color: #ef4444; font-weight: 700; font-size: 1.1rem; margin-bottom: 6px;">
+                    Research could not be completed because of an execution error.
+                </div>
+                <div style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.5;">
+                    An unexpected failure interrupted execution. Available partial findings discovered prior to failure have been preserved.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_retry, _ = st.columns([1.8, 5.2])
+        with col_retry:
+            if st.button("🔄 Retry / Resume Research", type="primary", use_container_width=True, key=f"retry_single_{result.session_id}"):
+                from src.orchestration.background_runner import resume_research_job
+                if resume_research_job(result.session_id):
+                    st.toast("Retrying research from checkpoint...")
+                    from ui.components.layout import navigate_to
+                    navigate_to("History")
+                    st.rerun()
+
+        with st.expander("🔍 Failure Details & Error Log", expanded=True):
+            st.error(result.error or "Unknown runtime execution error.")
+
+    elif exec_status == ResearchExecutionStatus.COMPLETED and outcome == WinnerOutcome.WINNER_SELECTED and ev:
+        st.markdown(
+            f"""
+            <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 12px 18px; margin-bottom: 14px;">
+                <span style="color: #10b981; font-weight: 700; font-size: 1.05rem;">Research completed. A qualifying winner was identified.</span>
+            </div>
             <div class="hiq-winner">
                 <div class="label">Independent Selection · Winning Idea Recommendation</div>
                 <h2>{ev.candidate_title}</h2>
@@ -84,17 +158,32 @@ def _render_single_track(result: PipelineResult) -> None:
             """,
             unsafe_allow_html=True,
         )
-    else:
+
+    elif exec_status == ResearchExecutionStatus.COMPLETED and outcome == WinnerOutcome.NO_QUALIFYING_WINNER:
         rejection_reason = (
             winner.rejection_reason
             if winner and winner.rejection_reason
             else "None of the generated candidates passed every mandatory quality gate."
         )
-        st.error(f"**No Qualifying Winner Declared.** {rejection_reason}")
+        st.markdown(
+            f"""
+            <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
+                <div style="color: #f59e0b; font-weight: 700; font-size: 1.05rem; margin-bottom: 4px;">
+                    Research completed. No candidate passed all mandatory quality requirements.
+                </div>
+                <div style="color: #cbd5e1; font-size: 0.88rem;">
+                    {rejection_reason}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.caption(
             "HackathonIQ enforces strict empirical standards. When no candidate passes all quality gates, "
             "the platform honestly reports failure rather than fabricating an unsupported idea."
         )
+    else:
+        st.info("Research execution is active in the background. Tracking live progress in History.")
 
     # Compact Metrics Row
     m1, m2, m3, m4, m5, m6 = st.columns(6)
@@ -158,9 +247,61 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
     # -------------------------------------------------------------
     # SECTION A: EXECUTIVE SUMMARY (AT THE VERY TOP)
     # -------------------------------------------------------------
-    if mode_a:
+    exec_status = multi.execution_status
+    outcome = multi.winner_outcome
+
+    if exec_status == ResearchExecutionStatus.INTERRUPTED:
+        st.markdown(
+            f"""
+            <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;">
+                <div style="color: #f59e0b; font-weight: 700; font-size: 1.1rem; margin-bottom: 6px;">
+                    Research was interrupted before evaluation could be completed. No final winner decision has been made.
+                </div>
+                <div style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.5;">
+                    Autonomous multi-track research stopped before all {len(tracks)} tracks could finish.
+                    Partial discoveries and completed track evaluations are preserved below.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_res, _ = st.columns([1.8, 5.2])
+        with col_res:
+            if st.button("▶ Resume Research", type="primary", use_container_width=True, key=f"res_multi_{multi.session_id}"):
+                from src.orchestration.background_runner import resume_research_job
+                if resume_research_job(multi.session_id):
+                    st.toast("Resuming multi-track research from last completed track...")
+                    from ui.components.layout import navigate_to
+                    navigate_to("History")
+                    st.rerun()
+
+    elif exec_status == ResearchExecutionStatus.FAILED:
+        st.markdown(
+            f"""
+            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;">
+                <div style="color: #ef4444; font-weight: 700; font-size: 1.1rem; margin-bottom: 6px;">
+                    Research could not be completed because of an execution error.
+                </div>
+                <div style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.5;">
+                    An unexpected failure interrupted multi-track execution. Any completed track findings have been preserved.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_retry, _ = st.columns([1.8, 5.2])
+        with col_retry:
+            if st.button("🔄 Retry / Resume Research", type="primary", use_container_width=True, key=f"retry_multi_{multi.session_id}"):
+                from src.orchestration.background_runner import resume_research_job
+                if resume_research_job(multi.session_id):
+                    st.toast("Retrying multi-track research...")
+                    from ui.components.layout import navigate_to
+                    navigate_to("History")
+                    st.rerun()
+
+    elif mode_a:
         # Mode A: Best Overall Track Winner
-        if comp and (comp.overall_winner_evaluation or comp.overall_winning_candidate) and comp.overall_winning_track:
+        if outcome == WinnerOutcome.WINNER_SELECTED and comp and (comp.overall_winner_evaluation or comp.overall_winning_candidate) and comp.overall_winning_track:
             w = comp.overall_winning_candidate
             ev = comp.overall_winner_evaluation
             t = comp.overall_winning_track
@@ -172,6 +313,9 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
 
             st.markdown(
                 f"""
+                <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 12px 18px; margin-bottom: 14px;">
+                    <span style="color: #10b981; font-weight: 700; font-size: 1.05rem;">Research completed. A qualifying winner was identified.</span>
+                </div>
                 <div class="hiq-winner">
                     <div class="label">Mode A · Best Overall Track Winner</div>
                     <h2>Track: {t.name}</h2>
@@ -190,8 +334,18 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
                 unsafe_allow_html=True,
             )
         else:
-            st.error(
-                "**No overall winner declared.** None of the candidates across all tracks passed every mandatory qualification gate."
+            st.markdown(
+                f"""
+                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
+                    <div style="color: #f59e0b; font-weight: 700; font-size: 1.05rem; margin-bottom: 4px;">
+                        Research completed. No candidate passed all mandatory quality requirements.
+                    </div>
+                    <div style="color: #cbd5e1; font-size: 0.88rem;">
+                        None of the candidate solutions across all {len(tracks)} tracks passed every mandatory qualification gate.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
             st.caption(
                 "HackathonIQ maintains an honest standard across all evaluated tracks."
@@ -268,7 +422,18 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
 def _render_winning_blueprint(result: PipelineResult, ev, solution) -> None:
     """Render Section C: Winning idea deep technical blueprint and scorecard."""
     if not ev:
-        st.info("No qualifying winning idea was declared for this run.")
+        if result.execution_status == ResearchExecutionStatus.INTERRUPTED:
+            st.info(
+                "Solution architecture blueprint is not available because research was interrupted before candidate evaluation was completed. "
+                "Explore Tab 4 (Domain & Problem Mapping) and Tab 5 (Evidence & Sources) to view partial findings, or click '▶ Resume Research' above to finish."
+            )
+        elif result.execution_status == ResearchExecutionStatus.FAILED:
+            st.info(
+                "Solution architecture blueprint is not available because an error stopped execution. "
+                "Check the failure log above or retry research."
+            )
+        else:
+            st.info("No qualifying winning idea was declared for this run.")
         return
 
     st.markdown("### Solution Architecture & Implementation Blueprint")

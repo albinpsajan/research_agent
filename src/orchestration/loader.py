@@ -97,6 +97,9 @@ def load_session_result(
         report=report,
         status=session.get("status", "unknown"),
     )
+    err_res = _latest(repository, session_id, "orchestrator")
+    if err_res and isinstance(err_res, dict) and err_res.get("error"):
+        result.error = f"{err_res.get('error_type', 'Error')}: {err_res.get('error')}"
     if session.get("created_at"):
         try:
             result.started_at = datetime.fromisoformat(str(session["created_at"]))

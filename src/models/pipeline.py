@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +14,24 @@ from src.models.hackathon import HackathonInput, HackathonIntelligence
 from src.models.report import FinalReport
 from src.models.research import InnovationReport
 from src.utils.hackathon_time import utc_now
+
+
+class ResearchExecutionStatus(str, Enum):
+    """Execution lifecycle status of a research session."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    INTERRUPTED = "interrupted"
+    FAILED = "failed"
+
+
+class WinnerOutcome(str, Enum):
+    """Independent evaluation outcome regarding candidate winners."""
+
+    WINNER_SELECTED = "winner_selected"
+    NO_QUALIFYING_WINNER = "no_qualifying_winner"
+    NOT_EVALUATED = "not_evaluated"
 
 
 class PipelineOptions(BaseModel):
@@ -62,6 +81,33 @@ class PipelineResult(BaseModel):
     def final_report(self) -> FinalReport | None:
         """Alias property matching UI references."""
         return self.report
+
+    @property
+    def execution_status(self) -> ResearchExecutionStatus:
+        """Explicit research execution status."""
+        s = (self.status or "completed").lower()
+        if s in ("running", "in_progress", "started"):
+            return ResearchExecutionStatus.RUNNING
+        elif s in ("pending", "created", "draft"):
+            return ResearchExecutionStatus.PENDING
+        elif s == "interrupted":
+            return ResearchExecutionStatus.INTERRUPTED
+        elif s == "failed":
+            return ResearchExecutionStatus.FAILED
+        else:
+            return ResearchExecutionStatus.COMPLETED
+
+    @property
+    def winner_outcome(self) -> WinnerOutcome:
+        """Explicit evaluation outcome, strictly separated from execution status."""
+        if self.execution_status != ResearchExecutionStatus.COMPLETED:
+            return WinnerOutcome.NOT_EVALUATED
+        if self.winner and self.winner.has_winner and self.winner.winner:
+            return WinnerOutcome.WINNER_SELECTED
+        # Only declare NO_QUALIFYING_WINNER if evaluation was actually conducted
+        if self.winner is not None or (self.report and self.report.has_winner is not None):
+            return WinnerOutcome.NO_QUALIFYING_WINNER
+        return WinnerOutcome.NOT_EVALUATED
 
     def finalize(self) -> None:
         self.completed_at = utc_now()

@@ -203,26 +203,59 @@ def render() -> None:
                     unsafe_allow_html=True,
                 )
 
-            if not is_running and winner_title:
-                st.markdown(
-                    f"<div style='margin-bottom: 12px; font-size: 0.86rem; color: #cbd5e1;'>"
-                    f"<span style='color: #f59e0b; font-weight: 600;'>Top Selected Solution:</span> {winner_title}"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
+            if not is_running:
+                if winner_title:
+                    st.markdown(
+                        f"<div style='margin-bottom: 12px; font-size: 0.86rem; color: #cbd5e1;'>"
+                        f"<span style='color: #10b981; font-weight: 600;'>Top Selected Solution:</span> {winner_title}"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                elif raw_status == "interrupted":
+                    st.markdown(
+                        f"<div style='margin-bottom: 12px; font-size: 0.85rem; color: #f59e0b;'>"
+                        f"⚠️ Research was interrupted before evaluation could be completed. No final winner decision has been made."
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                elif raw_status == "failed":
+                    st.markdown(
+                        f"<div style='margin-bottom: 12px; font-size: 0.85rem; color: #ef4444;'>"
+                        f"❌ Research stopped due to an execution error. Available partial results are preserved."
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f"<div style='margin-bottom: 12px; font-size: 0.85rem; color: #94a3b8;'>"
+                        f"Evaluation completed. No candidate passed all mandatory quality gates."
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
 
             # Action buttons
-            col_load, col_dl, col_del, _ = st.columns([1.5, 1.8, 1.2, 3.5])
+            col_load, col_res, col_dl, col_del, _ = st.columns([1.6, 1.4, 1.6, 1.1, 2.3])
 
             with col_load:
                 if is_running:
                     if st.button("🔄 Refresh", key=f"ref_{sess_id}", type="secondary", use_container_width=True):
                         st.rerun()
                 else:
-                    if st.button("Load Results →", key=f"load_{sess_id}", type="primary", use_container_width=True):
+                    btn_label = "Load Results →" if raw_status == "completed" or latest_report else "Load Partial Results →"
+                    if st.button(btn_label, key=f"load_{sess_id}", type="primary" if (raw_status == "completed" or latest_report) else "secondary", use_container_width=True):
                         st.session_state["target_session_to_load"] = sess_id
                         navigate_to("New Research")
                         st.rerun()
+
+            with col_res:
+                if not is_running and raw_status in ("interrupted", "failed"):
+                    if st.button("▶ Resume", key=f"res_{sess_id}", type="primary", use_container_width=True):
+                        from src.orchestration.background_runner import resume_research_job
+                        if resume_research_job(sess_id):
+                            st.toast(f"Resuming research session {sess_id[:8]} from checkpoint...")
+                            st.rerun()
+                        else:
+                            st.error("Failed to resume session.")
 
             with col_dl:
                 if latest_report and latest_report.get("report_markdown"):

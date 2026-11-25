@@ -22,6 +22,7 @@ from src.models.hackathon import (
 )
 from src.models.report import FinalReport
 from src.models.research import InnovationReport
+from src.models.pipeline import ResearchExecutionStatus, WinnerOutcome
 from src.utils.hackathon_time import utc_now
 
 
@@ -192,3 +193,35 @@ class MultiTrackPipelineResult(BaseModel):
     def finalize(self) -> None:
         self.completed_at = utc_now()
         self.duration_seconds = (self.completed_at - self.started_at).total_seconds()
+
+    @property
+    def execution_status(self) -> ResearchExecutionStatus:
+        """Explicit research execution status."""
+        s = (self.status or "completed").lower()
+        if s in ("running", "in_progress", "started"):
+            return ResearchExecutionStatus.RUNNING
+        elif s in ("pending", "created", "draft"):
+            return ResearchExecutionStatus.PENDING
+        elif s == "interrupted":
+            return ResearchExecutionStatus.INTERRUPTED
+        elif s == "failed":
+            return ResearchExecutionStatus.FAILED
+        else:
+            return ResearchExecutionStatus.COMPLETED
+
+    @property
+    def winner_outcome(self) -> WinnerOutcome:
+        """Explicit evaluation outcome, strictly separated from execution status."""
+        if self.execution_status != ResearchExecutionStatus.COMPLETED:
+            return WinnerOutcome.NOT_EVALUATED
+        if self.comparison:
+            has_winner = bool(
+                self.comparison.overall_winning_candidate
+                or any(w for w in self.comparison.per_track_winners.values() if w)
+            )
+            return WinnerOutcome.WINNER_SELECTED if has_winner else WinnerOutcome.NO_QUALIFYING_WINNER
+        if self.master_report and self.master_report.has_winner:
+            return WinnerOutcome.WINNER_SELECTED
+        if self.master_report:
+            return WinnerOutcome.NO_QUALIFYING_WINNER
+        return WinnerOutcome.NOT_EVALUATED

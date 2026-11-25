@@ -68,6 +68,7 @@ def _research_worker(
     session_id: str,
     hackathon: HackathonInput,
     options: PipelineOptions,
+    resume: bool = False,
 ) -> None:
     """Thread worker: instantiates independent DB and LLM clients."""
     repo = Repository()
@@ -95,21 +96,22 @@ def _research_worker(
     repo.update_session_status(session_id, "running")
 
     try:
-        logger.info("Background execution running for session %s", session_id[:8])
+        logger.info("Background execution running for session %s (resume=%s)", session_id[:8], resume)
         if hackathon.is_multi_track:
-            pipeline.run_multi_track(hackathon, options, session_id=session_id)
+            result = pipeline.run_multi_track(hackathon, options, session_id=session_id, resume=resume)
         else:
-            pipeline.run(hackathon, options, session_id=session_id)
+            result = pipeline.run(hackathon, options, session_id=session_id, resume=resume)
 
+        final_status = getattr(result, "status", "completed")
         with _LOCK:
             if session_id in _JOBS:
-                _JOBS[session_id]["status"] = "completed"
+                _JOBS[session_id]["status"] = "completed" if final_status in ("completed", "completed_no_winner") else final_status
                 _JOBS[session_id]["progress"] = 1.0
-                _JOBS[session_id]["stage"] = "Research Completed"
-                _JOBS[session_id]["message"] = "Solution blueprints, gate audits, and reports finalized."
+                _JOBS[session_id]["stage"] = "Research Completed" if final_status in ("completed", "completed_no_winner") else "Execution Interrupted"
+                _JOBS[session_id]["message"] = "Solution blueprints, gate audits, and reports finalized." if final_status in ("completed", "completed_no_winner") else "Research execution stopped."
                 _JOBS[session_id]["completed_at"] = datetime.now()
 
-        logger.info("Background execution successfully finished for session %s", session_id[:8])
+        logger.info("Background execution successfully finished for session %s with status %s", session_id[:8], final_status)
 
     except Exception as exc:  # noqa: BLE001
         logger.error("Background research failed for session %s: %s", session_id[:8], exc, exc_info=True)
@@ -121,6 +123,134 @@ def _research_worker(
                 _JOBS[session_id]["stage"] = "Execution Failed"
                 _JOBS[session_id]["message"] = f"Failed: {exc}"
                 _JOBS[session_id]["completed_at"] = datetime.now()
+
+
+def can_resume_session(session_id: str, repository: Repository | None = None) -> tuple[bool, str, dict[str, Any]]:
+    """Determine whether an interrupted/failed session can safely resume."""
+    repo = repository or Repository()
+    session = repo.get_session(session_id)
+    if not session:
+        return False, "Session not found.", {}
+
+    if is_job_active(session_id):
+        return False, "Research session is currently active.", {}
+
+    raw_status = (session.get("status") or "").lower()
+    if raw_status in ("completed", "completed_no_winner"):
+        return False, "Research session is already completed.", {}
+
+    # Inspect persisted checkpoints
+    from src.orchestration.loader import _latest
+    checkpoints: dict[str, Any] = {}
+    intel = _latest(repo, session_id, "hackathon_intelligence") or _latest(repo, session_id, "shared_intelligence")
+    if intel:
+        checkpoints["hackathon_intelligence"] = True
+
+    domain = _latest(repo, session_id, "domain_discovery")
+    if domain:
+        checkpoints["domain_discovery"] = len(domain.get("problem_candidates", [])) if isinstance(domain, dict) else True
+
+    innov = _latest(repo, session_id, "innovation_research")
+    if innov:
+        checkpoints["innovation_research"] = True
+
+    feas = _latest(repo, session_id, "solution_architect")
+    if feas:
+        checkpoints["solution_architect"] = len(feas.get("candidates", [])) if isinstance(feas, dict) else True
+
+    crit = _latest(repo, session_id, "adversarial_critic")
+    if crit:
+        checkpoints["adversarial_critic"] = True
+
+    return True, "Safe to resume from persisted checkpoints.", checkpoints
+
+
+def resume_research_job(
+    session_id: str,
+    repository: Repository | None = None,
+) -> bool:
+    """Safely resume an interrupted research session from its last persisted checkpoint."""
+    repo = repository or Repository()
+    can_resume, reason, _ = can_resume_session(session_id, repo)
+    if not can_resume:
+        logger.warning("Cannot resume session %s: %s", session_id[:8], reason)
+        return False
+
+    session = repo.get_session(session_id)
+    if not session:
+        return False
+
+    with _LOCK:
+        if is_job_active(session_id):
+            logger.warning("Duplicate resume prevented: session %s is already running", session_id[:8])
+            return False
+
+        from src.orchestration.loader import _clean_url
+        deadline = None
+        if session.get("deadline"):
+            try:
+                deadline = datetime.fromisoformat(str(session["deadline"]))
+            except ValueError:
+                pass
+
+        is_multi = bool(session.get("is_multi_track"))
+        tracks = []
+        from src.models.hackathon import MultiTrackMode
+        mode = MultiTrackMode.BEST_OVERALL
+        if is_multi:
+            from src.models.hackathon import HackathonTrack
+            track_rows = repo.get_tracks(session_id)
+            tracks = [
+                HackathonTrack(
+                    id=t["id"],
+                    name=t["track_name"],
+                    description=t.get("description"),
+                    track_rules=t.get("track_rules"),
+                    official_track_url=_clean_url(t.get("official_url")),
+                )
+                for t in track_rows
+            ]
+            mode_raw = session.get("multi_track_mode") or "best_overall"
+            mode = MultiTrackMode.BEST_PER_TRACK if mode_raw == "best_per_track" else MultiTrackMode.BEST_OVERALL
+
+        hackathon = HackathonInput(
+            theme=session["hackathon_theme"],
+            name=session.get("hackathon_name"),
+            website_url=_clean_url(session.get("website_url")),
+            rules_url=_clean_url(session.get("rules_url")),
+            deadline=deadline,
+            constraints=session.get("constraints"),
+            is_multi_track=is_multi,
+            multi_track_mode=mode,
+            tracks=tracks,
+            session_id=session_id,
+        )
+
+        options = PipelineOptions()
+
+        _JOBS[session_id] = {
+            "session_id": session_id,
+            "theme": hackathon.theme,
+            "name": hackathon.name or "Hackathon",
+            "is_multi_track": hackathon.is_multi_track,
+            "status": "running",
+            "stage": "Resuming Research",
+            "message": "Restoring verified checkpoints and resuming autonomous execution...",
+            "progress": 0.1,
+            "error": None,
+            "started_at": datetime.now(),
+            "completed_at": None,
+        }
+
+    thread = threading.Thread(
+        target=_research_worker,
+        args=(session_id, hackathon, options, True),
+        daemon=True,
+        name=f"resume-{session_id[:8]}",
+    )
+    thread.start()
+    logger.info("Launched background resume thread for session %s", session_id[:8])
+    return True
 
 
 def get_job_status(session_id: str, repository: Repository | None = None) -> dict[str, Any] | None:

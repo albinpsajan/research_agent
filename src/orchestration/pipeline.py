@@ -88,9 +88,10 @@ class HackathonPipeline:
         options: PipelineOptions | None = None,
         *,
         session_id: str | None = None,
+        resume: bool = False,
     ) -> PipelineResult:
         if hackathon.is_multi_track and hackathon.tracks:
-            multi_result = self.run_multi_track(hackathon, options, session_id=session_id)
+            multi_result = self.run_multi_track(hackathon, options, session_id=session_id, resume=resume)
             comp = multi_result.comparison
             winning_tid = (
                 comp.overall_winning_track.id
@@ -141,6 +142,51 @@ class HackathonPipeline:
             "options": options,
             "started_at": started,
         }
+
+        # Checkpoint restoration when resuming
+        if resume and session_id:
+            from src.orchestration.loader import _latest, _model
+            from src.models.hackathon import HackathonIntelligence
+            from src.models.domain import DomainMap
+            from src.models.research import InnovationReport
+            from src.models.candidate import FeasibilityReport
+            from src.models.evaluation import FinalEvaluationReport
+
+            raw_intel = _latest(self.repository, session_id, "hackathon_intelligence")
+            if raw_intel:
+                intel_model = _model(HackathonIntelligence, raw_intel)
+                if intel_model:
+                    initial["intelligence"] = intel_model
+                    logger.info("Resuming session %s: restored HackathonIntelligence checkpoint", session_id[:8])
+
+            raw_domain = _latest(self.repository, session_id, "domain_discovery")
+            if raw_domain:
+                domain_model = _model(DomainMap, raw_domain)
+                if domain_model and domain_model.problem_candidates:
+                    initial["domain_map"] = domain_model
+                    logger.info("Resuming session %s: restored DomainMap checkpoint (%d problems)", session_id[:8], len(domain_model.problem_candidates))
+
+            raw_innov = _latest(self.repository, session_id, "innovation_research")
+            if raw_innov:
+                innov_model = _model(InnovationReport, raw_innov)
+                if innov_model:
+                    initial["innovation_report"] = innov_model
+                    logger.info("Resuming session %s: restored InnovationReport checkpoint", session_id[:8])
+
+            raw_feas = _latest(self.repository, session_id, "solution_architect")
+            if raw_feas:
+                feas_model = _model(FeasibilityReport, raw_feas)
+                if feas_model and feas_model.candidates:
+                    initial["feasibility"] = feas_model
+                    logger.info("Resuming session %s: restored FeasibilityReport checkpoint (%d candidates)", session_id[:8], len(feas_model.candidates))
+
+            raw_eval = _latest(self.repository, session_id, "adversarial_critic")
+            if raw_eval:
+                eval_model = _model(FinalEvaluationReport, raw_eval)
+                if eval_model:
+                    initial["final_evaluation"] = eval_model
+                    logger.info("Resuming session %s: restored FinalEvaluationReport checkpoint", session_id[:8])
+
         self._snapshot = dict(initial)
         try:
             graph = self._build_graph()
@@ -232,6 +278,7 @@ class HackathonPipeline:
         options: PipelineOptions | None = None,
         *,
         session_id: str | None = None,
+        resume: bool = False,
     ) -> MultiTrackPipelineResult:
         """Execute complete multi-track research and cross-track evaluation."""
         options = options or PipelineOptions(
@@ -260,7 +307,7 @@ class HackathonPipeline:
         self.repository.update_session_status(session_id, "running")
 
         # 1. Shared Organizer Research (Agent 1 once)
-        self._emit("shared_intelligence", "Agent 1 — Shared Hackathon Intelligence (once across all tracks)", 0.05)
+        shared_intelligence = None
         context = ""
         if options.include_continuous_intelligence:
             try:
@@ -275,23 +322,33 @@ class HackathonPipeline:
             except Exception as exc:
                 logger.warning(f"Continuous intelligence context failed: {exc}")
 
-        shared_agent = HackathonIntelligenceAgent(
-            self.llm, self.research, self.repository, self.settings.agent
-        )
-        shared_intelligence = shared_agent.run(
-            session_id,
-            hackathon,
-            intelligence_context=context,
-        )
-        del shared_agent
-        gc.collect()
+        if resume and session_id:
+            from src.orchestration.loader import _latest, _model
+            raw_shared = _latest(self.repository, session_id, "shared_intelligence") or _latest(self.repository, session_id, "hackathon_intelligence")
+            if raw_shared:
+                shared_intelligence = _model(HackathonIntelligence, raw_shared)
+                if shared_intelligence:
+                    logger.info("Resuming multi-track session %s: restored shared intelligence checkpoint", session_id[:8])
 
-        self.repository.save_agent_result(
-            session_id,
-            "shared_intelligence",
-            "hackathon_intelligence",
-            shared_intelligence.model_dump(mode="json"),
-        )
+        if not shared_intelligence:
+            self._emit("shared_intelligence", "Agent 1 — Shared Hackathon Intelligence (once across all tracks)", 0.05)
+            shared_agent = HackathonIntelligenceAgent(
+                self.llm, self.research, self.repository, self.settings.agent
+            )
+            shared_intelligence = shared_agent.run(
+                session_id,
+                hackathon,
+                intelligence_context=context,
+            )
+            del shared_agent
+            gc.collect()
+
+            self.repository.save_agent_result(
+                session_id,
+                "shared_intelligence",
+                "hackathon_intelligence",
+                shared_intelligence.model_dump(mode="json"),
+            )
 
         # 2. Sequential Track Research & Evaluation
         track_results: dict[str, TrackResult] = {}
@@ -301,11 +358,6 @@ class HackathonPipeline:
         for idx, track in enumerate(hackathon.tracks):
             track_start = utc_now()
             progress_frac = 0.10 + 0.75 * (idx / max(1, total_tracks))
-            self._emit(
-                f"track_{track.id}",
-                f"Processing Track {idx + 1}/{total_tracks}: '{track.name}' (Sequential Resource-Safe Mode)",
-                progress_frac,
-            )
 
             # Build track-specific HackathonInput
             track_theme = f"{hackathon.theme} — Track: {track.name}"
@@ -324,6 +376,39 @@ class HackathonPipeline:
                 deadline=hackathon.deadline,
                 constraints=track_constraints,
                 session_id=session_id,
+            )
+
+            # Check if this track was already completed when resuming
+            if resume and session_id:
+                from src.orchestration.loader import _latest
+                raw_summary = _latest(self.repository, session_id, f"track_{track.id}")
+                if raw_summary and raw_summary.get("status") in ("completed", "completed_no_winner"):
+                    reports = self.repository.get_session_reports(session_id)
+                    existing_track_report = None
+                    for rep in reports:
+                        if track.id in rep.get("id", ""):
+                            try:
+                                from src.models.report import FinalReport
+                                existing_track_report = FinalReport.model_validate(json.loads(rep["report_json"]))
+                                break
+                            except Exception:
+                                pass
+                    if existing_track_report:
+                        logger.info("Resuming multi-track: skipping already completed track '%s'", track.name)
+                        track_results[track.id] = TrackResult(
+                            track=track,
+                            input=track_input,
+                            report=existing_track_report,
+                            report_path=f"data/reports/{existing_track_report.metadata.report_id}.md",
+                            status=raw_summary.get("status", "completed"),
+                            duration_seconds=float(raw_summary.get("duration_seconds", 0.0)),
+                        )
+                        continue
+
+            self._emit(
+                f"track_{track.id}",
+                f"Processing Track {idx + 1}/{total_tracks}: '{track.name}' (Sequential Resource-Safe Mode)",
+                progress_frac,
             )
 
             # Build track-specific HackathonIntelligence
@@ -519,9 +604,16 @@ class HackathonPipeline:
         self._emit("master_report", "Generating master cross-track comparison report", 0.95)
         has_any_winner = bool(
             comparison_result.overall_winning_candidate
-            or any(w for w in comparison_result.per_track_winners.values())
+            or any(w for w in comparison_result.per_track_winners.values() if w)
         )
-        overall_status = "completed" if has_any_winner else "completed_no_winner"
+        all_failed = all(t.status == "failed" for t in track_results.values()) if track_results else True
+        any_failed = any(t.status == "failed" for t in track_results.values())
+        if all_failed:
+            overall_status = "failed"
+        elif any_failed and not has_any_winner:
+            overall_status = "interrupted"
+        else:
+            overall_status = "completed" if has_any_winner else "completed_no_winner"
 
         multi_result = MultiTrackPipelineResult(
             session_id=session_id,
@@ -609,6 +701,10 @@ class HackathonPipeline:
         }
 
     def _hackathon_intelligence(self, state: PipelineState) -> dict:
+        if state.get("intelligence"):
+            logger.info("Resuming session %s: reusing verified HackathonIntelligence checkpoint", state["session_id"][:8])
+            self._emit("hackathon_intelligence", "Agent 1 — Hackathon intelligence (restored from checkpoint)", STAGES["hackathon_intelligence"][0])
+            return {"intelligence": state["intelligence"]}
         self._emit("hackathon_intelligence", STAGES["hackathon_intelligence"][1])
         agent = HackathonIntelligenceAgent(
             self.llm, self.research, self.repository, self.settings.agent
@@ -623,6 +719,10 @@ class HackathonPipeline:
         return {"intelligence": intelligence}
 
     def _domain_discovery(self, state: PipelineState) -> dict:
+        if state.get("domain_map") and state["domain_map"].problem_candidates:
+            logger.info("Resuming session %s: reusing verified DomainMap checkpoint (%d problems)", state["session_id"][:8], len(state["domain_map"].problem_candidates))
+            self._emit("domain_discovery", "Agent 2 — Dynamic domain & problem discovery (restored from checkpoint)", STAGES["domain_discovery"][0])
+            return {"domain_map": state["domain_map"]}
         self._emit("domain_discovery", STAGES["domain_discovery"][1])
         agent = DomainDiscoveryAgent(
             self.llm, self.research, self.repository, self.settings.agent
@@ -643,6 +743,10 @@ class HackathonPipeline:
         return {"domain_map": domain_map}
 
     def _innovation_research(self, state: PipelineState) -> dict:
+        if state.get("innovation_report") and (state["innovation_report"].total_solutions_found > 0 or state["innovation_report"].gaps):
+            logger.info("Resuming session %s: reusing verified InnovationReport checkpoint", state["session_id"][:8])
+            self._emit("innovation_research", "Agent 3 — Existing solutions & innovation gaps (restored from checkpoint)", STAGES["innovation_research"][0])
+            return {"innovation_report": state["innovation_report"]}
         self._emit("innovation_research", STAGES["innovation_research"][1])
         domain_map = state.get("domain_map")
         problems = domain_map.problem_candidates if domain_map else []
@@ -669,6 +773,10 @@ class HackathonPipeline:
         return {"innovation_report": report}
 
     def _solution_architecture(self, state: PipelineState) -> dict:
+        if state.get("feasibility") and state["feasibility"].candidates:
+            logger.info("Resuming session %s: reusing verified FeasibilityReport checkpoint (%d candidates)", state["session_id"][:8], len(state["feasibility"].candidates))
+            self._emit("solution_architecture", "Agent 4 — Solution architecture & feasibility (restored from checkpoint)", STAGES["solution_architecture"][0])
+            return {"feasibility": state["feasibility"]}
         self._emit("solution_architecture", STAGES["solution_architecture"][1])
         domain_map = state.get("domain_map")
         innovation = state.get("innovation_report")
@@ -699,7 +807,10 @@ class HackathonPipeline:
         return {"feasibility": feasibility}
 
     def _adversarial_evaluation(self, state: PipelineState) -> dict:
-        self._emit("adversarial_evaluation", STAGES["adversarial_evaluation"][1])
+        if state.get("final_evaluation") and state["final_evaluation"].evaluations:
+            logger.info("Resuming session %s: reusing verified FinalEvaluationReport checkpoint", state["session_id"][:8])
+            self._emit("adversarial_evaluation", "Agent 5 — Adversarial debate and final evaluation (restored from checkpoint)", STAGES["adversarial_evaluation"][0])
+            return {"final_evaluation": state["final_evaluation"]}
         feasibility = state.get("feasibility")
         domain_map = state.get("domain_map")
         innovation = state.get("innovation_report")
