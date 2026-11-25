@@ -1,8 +1,10 @@
-"""Page One — New Research: Guided ChatGPT-style research builder, live execution, and embedded results."""
+"""Page One — New Research: Guided ChatGPT-style research builder and session launcher."""
 
 from __future__ import annotations
 
 import hashlib
+import uuid
+from unittest.mock import MagicMock
 
 import streamlit as st
 
@@ -10,17 +12,30 @@ from config.settings import get_settings
 from src.knowledge.document_intelligence.service import DocumentIntelligenceService
 from src.models.hackathon import HackathonInput, HackathonTrack, MultiTrackMode
 from src.models.pipeline import PipelineOptions, PipelineResult
+from src.orchestration.background_runner import is_job_active, start_research_job
 from src.orchestration.loader import load_multi_track_result, load_session_result
-from src.orchestration.pipeline import HackathonPipeline
 from src.research.base import ResearchError, validate_public_url
 from ui.components.common import (
     format_datetime,
     get_llm,
     get_repository,
     hero,
+    navigate_to,
     ollama_banner,
 )
 from ui.pages import results as results_page
+
+
+def _reset_builder_state() -> None:
+    """Completely resets all New Research state for an isolated, blank session."""
+    st.session_state["draft_session_id"] = str(uuid.uuid4())
+    st.session_state["configured_hackathon"] = None
+    st.session_state["builder_tracks"] = []
+    st.session_state["current_result"] = None
+    st.session_state["current_multi_result"] = None
+    st.session_state["current_session_id"] = None
+    st.session_state["view_mode"] = "builder"
+    st.session_state["uploader_key_version"] = st.session_state.get("uploader_key_version", 0) + 1
 
 
 def render() -> None:
@@ -30,10 +45,8 @@ def render() -> None:
     service = DocumentIntelligenceService(repository=repo, llm=llm)
 
     # -------------------------------------------------------------------------
-    # 0. Handle sidebar session loading request
+    # 0. Handle session loading request
     # -------------------------------------------------------------------------
-    from unittest.mock import MagicMock
-
     if (
         "target_session_to_load" in st.session_state
         and st.session_state["target_session_to_load"]
@@ -45,34 +58,31 @@ def render() -> None:
         st.rerun()
 
     # -------------------------------------------------------------------------
-    # 1. If viewing results or previous research is loaded
+    # 1. If viewing results or loaded past research
     # -------------------------------------------------------------------------
     has_results = bool(
         (st.session_state.get("current_result") and not isinstance(st.session_state.get("current_result"), MagicMock))
         or (st.session_state.get("current_multi_result") and not isinstance(st.session_state.get("current_multi_result"), MagicMock))
     )
     if has_results and st.session_state.get("view_mode") == "results":
-        col_back, _ = st.columns([1, 4])
+        col_back, _ = st.columns([1.5, 4])
         with col_back:
             if st.button("← Start New Research", type="secondary", use_container_width=True):
-                st.session_state["current_result"] = None
-                st.session_state["current_multi_result"] = None
-                st.session_state["configured_hackathon"] = None
-                st.session_state["view_mode"] = "builder"
+                _reset_builder_state()
                 st.rerun()
 
         results_page.render()
         return
 
     # -------------------------------------------------------------------------
-    # 2. If research is currently in progress
+    # 2. Ensure Draft Session ID is Isolated
     # -------------------------------------------------------------------------
-    if st.session_state.get("research_in_progress") is True:
-        _render_execution_progress()
-        return
+    if "draft_session_id" not in st.session_state or not st.session_state["draft_session_id"]:
+        st.session_state["draft_session_id"] = str(uuid.uuid4())
+    draft_session_id = st.session_state["draft_session_id"]
 
     # -------------------------------------------------------------------------
-    # 3. New Research Builder: ChatGPT-style Welcome & Input
+    # 3. New Research Builder: Welcome & Input
     # -------------------------------------------------------------------------
     hero(
         "HackathonIQ",
@@ -81,13 +91,19 @@ def render() -> None:
         badge_text="Autonomous Engine",
     )
 
-    health = ollama_banner()
-    model = health.get("active_model") or settings.ollama.model
+    ollama_banner()
 
-    # Check for active document auto-configuration
+    # Clear Form / Reset Action
+    col_hdr, col_reset = st.columns([4, 1.2])
+    with col_reset:
+        if st.button("🗑 Clear Form", type="secondary", use_container_width=True, help="Wipe form and start a fresh research session"):
+            _reset_builder_state()
+            st.rerun()
+
+    # Check for active document auto-configuration strictly within THIS draft session
     auto_cfg: HackathonInput | None = st.session_state.get("configured_hackathon")
     if not auto_cfg:
-        auto_cfg = service.get_active_auto_configuration()
+        auto_cfg = service.get_active_auto_configuration(session_id=draft_session_id)
         if auto_cfg:
             st.session_state["configured_hackathon"] = auto_cfg
 
@@ -98,28 +114,30 @@ def render() -> None:
     ])
 
     # -------------------------------------------------------------
-    # TAB A: DOCUMENT UPLOAD & AUTO-EXTRACTION (Option A)
+    # TAB A: DOCUMENT UPLOAD & AUTO-EXTRACTION
     # -------------------------------------------------------------
     with tab_doc:
         st.markdown("#### Upload Event Guidelines or Problem Briefs")
-        st.caption("Supports PDF, scanned documents, JPG, PNG, WEBP. You can upload multiple files.")
+        st.caption("Supports PDF, scanned documents, JPG, PNG, WEBP. Uploaded files are isolated to this session.")
 
+        uploader_key = f"doc_uploader_{st.session_state.get('uploader_key_version', 0)}"
         uploaded_files = st.file_uploader(
             "Drop hackathon documents here",
             type=["pdf", "jpg", "jpeg", "png", "webp"],
             accept_multiple_files=True,
-            key="doc_uploader_main",
+            key=uploader_key,
             label_visibility="collapsed",
         )
 
         if uploaded_files and not isinstance(uploaded_files, MagicMock):
-            # Check if any new files need extraction
             new_files_to_process = []
             for f in uploaded_files:
                 f_bytes = f.getvalue()
                 f_hash = hashlib.sha256(f_bytes).hexdigest()
-                existing_doc = repo.get_uploaded_document_by_hash(f_hash)
-                if not existing_doc:
+                # Check duplicate strictly within draft_session_id
+                existing_in_session = repo.list_uploaded_documents(session_id=draft_session_id)
+                already_uploaded = any(d.get("file_hash") == f_hash for d in existing_in_session)
+                if not already_uploaded:
                     new_files_to_process.append((f, f_bytes))
 
             if new_files_to_process:
@@ -130,23 +148,34 @@ def render() -> None:
                         service.upload_document(
                             filename=f.name,
                             file_bytes=bts,
+                            session_id=draft_session_id,
                             extract_structured=True,
                         )
                     except Exception as e:
                         st.error(f"Error processing {f.name}: {e}")
                     p_bar.progress((idx + 1) / len(new_files_to_process))
 
-                # Auto-configure event details from extracted documents
+                # Auto-configure event details strictly from this session's documents
                 extracted_input, status, conflicts, profile = service.auto_configure_hackathon(
-                    mode=MultiTrackMode.BEST_OVERALL
+                    session_id=draft_session_id,
+                    mode=MultiTrackMode.BEST_OVERALL,
                 )
                 if extracted_input:
                     st.session_state["configured_hackathon"] = extracted_input
+                    st.session_state["builder_tracks"] = [
+                        {
+                            "name": t.name,
+                            "description": t.description or "",
+                            "track_rules": t.track_rules or "",
+                            "official_track_url": t.official_track_url or "",
+                        }
+                        for t in (extracted_input.tracks or [])
+                    ]
                     auto_cfg = extracted_input
                 st.success("✓ Documents ingested and analyzed! Review and edit the extracted details below.")
                 st.rerun()
 
-    # Determine default field values (from extracted document or manual state)
+    # Determine default field values (strictly from this session's auto_cfg or empty)
     default_theme = auto_cfg.theme if auto_cfg else ""
     default_name = auto_cfg.name or "" if auto_cfg else ""
     default_website = (
@@ -182,8 +211,8 @@ def render() -> None:
             unsafe_allow_html=True,
         )
 
-    # Initialize dynamic tracks in session state if not present
-    if "builder_tracks" not in st.session_state or auto_cfg:
+    # Initialize dynamic tracks in session state
+    if "builder_tracks" not in st.session_state:
         st.session_state["builder_tracks"] = [
             {
                 "name": t.name,
@@ -219,7 +248,7 @@ def render() -> None:
     st.markdown("##### Track Architecture")
     is_multi_track = st.checkbox(
         "Multi-Track Hackathon",
-        value=default_is_multi_track or len(st.session_state["builder_tracks"]) > 1,
+        value=default_is_multi_track or len(st.session_state.get("builder_tracks", [])) > 1,
         help="Enable to evaluate multiple distinct problem tracks independently.",
     )
 
@@ -309,7 +338,7 @@ def render() -> None:
             f"⚠️ **Existing Research Detected:** A research run for **'{d_name}'** already exists (Session `{d_id[:8]}`, created {d_date}). "
             "You can load previous results instantly or start a fresh run."
         )
-        col_dup1, col_dup2 = st.columns([1, 2])
+        col_dup1, _ = st.columns([1, 2])
         with col_dup1:
             if st.button("Load Existing Results", key=f"dup_load_{d_id}", type="primary", use_container_width=True):
                 _load_session_into_state(d_id, repo)
@@ -320,7 +349,7 @@ def render() -> None:
     # PRE-FLIGHT REVIEW SUMMARY
     # -------------------------------------------------------------
     st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-    active_docs = repo.list_uploaded_documents(is_active_only=True)
+    active_docs = repo.list_uploaded_documents(session_id=draft_session_id, is_active_only=True)
 
     tracks_to_run = [
         HackathonTrack(
@@ -340,7 +369,7 @@ def render() -> None:
     )
 
     # -------------------------------------------------------------
-    # START RESEARCH FORM (Explicit User Confirmation)
+    # START RESEARCH FORM (Explicit Launch)
     # -------------------------------------------------------------
     with st.form("research_execution_form"):
         st.markdown(
@@ -413,118 +442,33 @@ def render() -> None:
         max_debate_rounds=settings.agent.max_debate_rounds,
     )
 
-    # Launch execution with live progress inside New Research
-    st.session_state["research_in_progress"] = True
-    st.session_state["current_theme_running"] = theme.strip()
-    st.session_state["current_name_running"] = name.strip() or "Hackathon"
-    st.session_state["execution_stage"] = "Analyzing Hackathon Ground Truth & Rules"
-    st.session_state["execution_progress"] = 0.05
-    st.session_state["execution_message"] = "Reading official event rules and extracting judging criteria..."
-
-    _execute_research_pipeline(hackathon, options, repo, llm)
-
-
-def _execute_research_pipeline(hackathon: HackathonInput, options: PipelineOptions, repo, llm) -> None:
-    """Executes the pipeline with user-friendly live stage tracking."""
-    progress_bar = st.progress(0.0)
-    status_text = st.empty()
-
-    stage_names = {
-        "intelligence": "1. Analyzing Hackathon Ground Truth & Rules",
-        "domain": "2. Dynamic Domain & Problem Discovery",
-        "innovation": "3. Competitor Investigation & Benchmarking",
-        "architect": "4. Solution Architecture & Feasibility",
-        "critic": "5. Quality Gate Evaluation & Debate",
-    }
-
-    def on_progress(stage: str, message: str, frac: float) -> None:
-        frac_bounded = min(max(frac, 0.0), 1.0)
-        progress_bar.progress(frac_bounded)
-        clean_stage = stage_names.get(stage.lower(), stage)
-        status_text.markdown(f"**{frac_bounded:.0%}** · `{clean_stage}` — {message}")
-        st.session_state["execution_progress"] = frac_bounded
-        st.session_state["execution_stage"] = clean_stage
-        st.session_state["execution_message"] = message
-
-    pipeline = HackathonPipeline(llm=llm, repository=repo, progress=on_progress)
-
-    try:
-        with st.spinner("Autonomous agents are conducting research, testing competitors, and debating ideas..."):
-            if hackathon.is_multi_track:
-                multi_res = pipeline.run_multi_track(hackathon, options)
-                st.session_state["current_multi_result"] = multi_res
-                st.session_state["current_session_id"] = multi_res.session_id
-                comp = multi_res.comparison
-                winning_tid = comp.overall_winning_track.id if (comp and comp.overall_winning_track) else None
-                best_track_res = multi_res.track_results.get(winning_tid) if winning_tid else None
-                result = PipelineResult(
-                    session_id=multi_res.session_id,
-                    input=hackathon,
-                    intelligence=multi_res.shared_intelligence,
-                    domain_map=best_track_res.domain_map if best_track_res else None,
-                    innovation_report=best_track_res.innovation_report if best_track_res else None,
-                    feasibility=best_track_res.feasibility if best_track_res else None,
-                    debates=best_track_res.debates if best_track_res else [],
-                    winner=best_track_res.winner if best_track_res else None,
-                    report=multi_res.master_report,
-                    status=multi_res.status,
-                    started_at=multi_res.started_at,
-                    completed_at=multi_res.completed_at,
-                    duration_seconds=multi_res.duration_seconds,
-                )
-                st.session_state["current_result"] = result
-            else:
-                st.session_state["current_multi_result"] = None
-                result = pipeline.run(hackathon, options)
-                st.session_state["current_result"] = result
-                st.session_state["current_session_id"] = result.session_id
-
-        st.session_state["research_in_progress"] = False
-        st.session_state["view_mode"] = "results"
-        st.success("Research completed successfully!")
-        st.rerun()
-
-    except Exception as exc:  # noqa: BLE001
-        st.session_state["research_in_progress"] = False
-        st.error(f"Research execution failed: {exc}")
-
-
-def _render_execution_progress() -> None:
-    """Renders clean user-facing progress without developer logs."""
-    theme = st.session_state.get("current_theme_running", "Hackathon Research")
-    name = st.session_state.get("current_name_running", "Hackathon")
-    stage = st.session_state.get("execution_stage", "Executing autonomous research...")
-    message = st.session_state.get("execution_message", "Agents are evaluating problem candidates...")
-    progress_val = float(st.session_state.get("execution_progress", 0.1))
-
-    hero(
-        theme,
-        f"{name} · Autonomous Research in Progress",
-        eyebrow="Live Research Progress",
-        badge_text="Executing",
+    # 1. Persist session under draft_session_id
+    repo.create_session(
+        theme=theme.strip(),
+        name=name.strip() or None,
+        website_url=website.strip() or None,
+        rules_url=rules.strip() or None,
+        constraints=combined_constraints,
+        is_multi_track=is_multi_track,
+        multi_track_mode=multi_track_mode.value,
+        session_id=draft_session_id,
     )
+    if is_multi_track:
+        repo.save_tracks(draft_session_id, tracks_to_run)
 
-    st.progress(min(max(progress_val, 0.0), 1.0))
-    st.markdown(f"**Current Stage:** `{stage}`")
-    st.caption(f"Activity: {message}")
+    if active_docs:
+        repo.attach_documents_to_session(draft_session_id, [d["id"] for d in active_docs])
 
-    st.markdown(
-        """
-        <div style="background: #111827; border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 10px; padding: 18px 22px; margin-top: 18px;">
-            <div style="color: #14b8a6; font-weight: 600; font-size: 0.95rem; margin-bottom: 6px;">
-                Autonomous 5-Stage Deliberation Pipeline:
-            </div>
-            <div style="color: #94a3b8; font-size: 0.88rem; line-height: 1.6;">
-                1. <b>Ground Truth Analysis</b>: Rules, constraints, judging criteria<br>
-                2. <b>Dynamic Domain Discovery</b>: Uncovering underserved real-world problems<br>
-                3. <b>Competitor Research</b>: Auditing GitHub, arXiv, and existing startups<br>
-                4. <b>Solution Architecture</b>: Formulating buildable architectures and demo plans<br>
-                5. <b>Adversarial Quality Gates</b>: 10-gate audit and honest winner selection
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    # 2. Launch background research job asynchronously
+    start_research_job(draft_session_id, hackathon, options)
+
+    # 3. Cleanly wipe form state for the next session
+    _reset_builder_state()
+
+    # 4. Redirect immediately to History
+    navigate_to("History")
+    st.toast("Research launched! Tracking live progress in History.")
+    st.rerun()
 
 
 def _load_session_into_state(session_id: str, repository) -> None:

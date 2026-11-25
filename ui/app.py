@@ -85,6 +85,18 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
+    prev_nav = st.session_state.get("previous_nav_choice")
+    if prev_nav != choice:
+        st.session_state["previous_nav_choice"] = choice
+        if choice == "New Research" and not st.session_state.get("target_session_to_load"):
+            if st.session_state.get("view_mode") == "results":
+                st.session_state["view_mode"] = "builder"
+                st.session_state["current_result"] = None
+                st.session_state["current_multi_result"] = None
+                st.session_state["configured_hackathon"] = None
+                st.session_state["builder_tracks"] = []
+                st.session_state["uploader_key_version"] = st.session_state.get("uploader_key_version", 0) + 1
+
     # 3. ChatGPT-style Recent Sessions in Sidebar for Quick 1-Click Access
     repo = get_repository()
     recent_sessions = repo.list_sessions(limit=8)

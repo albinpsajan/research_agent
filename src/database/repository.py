@@ -22,6 +22,16 @@ class Repository:
 
     # --- Sessions ---
 
+    def create_draft_session(self, session_id: str) -> str:
+        """Ensure a draft session row exists in sessions table to satisfy foreign keys."""
+        with self.db.transaction() as conn:
+            conn.execute(
+                """INSERT OR IGNORE INTO sessions (id, hackathon_theme, status)
+                   VALUES (?, '[Draft Session]', 'draft')""",
+                (session_id,),
+            )
+        return session_id
+
     def create_session(
         self,
         theme: str,
@@ -32,14 +42,15 @@ class Repository:
         constraints: str | None = None,
         is_multi_track: bool = False,
         multi_track_mode: str = "best_overall",
+        session_id: str | None = None,
     ) -> str:
         """Create a new research session. Returns session ID."""
-        session_id = str(uuid.uuid4())
+        session_id = session_id or str(uuid.uuid4())
         with self.db.transaction() as conn:
             cols = [r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
             if "is_multi_track" in cols:
                 conn.execute(
-                    """INSERT INTO sessions (id, hackathon_theme, hackathon_name, website_url, 
+                    """INSERT OR REPLACE INTO sessions (id, hackathon_theme, hackathon_name, website_url, 
                        rules_url, deadline, constraints, is_multi_track, multi_track_mode, status) 
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')""",
                     (
@@ -56,7 +67,7 @@ class Repository:
                 )
             else:
                 conn.execute(
-                    """INSERT INTO sessions (id, hackathon_theme, hackathon_name, website_url, 
+                    """INSERT OR REPLACE INTO sessions (id, hackathon_theme, hackathon_name, website_url, 
                        rules_url, deadline, constraints, status) 
                        VALUES (?, ?, ?, ?, ?, ?, ?, 'created')""",
                     (
@@ -85,10 +96,11 @@ class Repository:
         row = self.db.fetch_one("SELECT * FROM sessions WHERE id=?", (session_id,))
         return dict(row) if row else None
 
-    def list_sessions(self, limit: int = 20) -> list[dict]:
-        """List recent sessions."""
+    def list_sessions(self, limit: int = 20, include_drafts: bool = False) -> list[dict]:
+        """List recent sessions, excluding un-launched draft sessions by default."""
+        where_clause = "" if include_drafts else "WHERE status != 'draft'"
         rows = self.db.fetch_all(
-            "SELECT * FROM sessions ORDER BY created_at DESC LIMIT ?", (limit,)
+            f"SELECT * FROM sessions {where_clause} ORDER BY created_at DESC LIMIT ?", (limit,)
         )
         return [dict(r) for r in rows]
 
@@ -867,6 +879,8 @@ class Repository:
         """Persist or update an uploaded document record."""
         warnings_json = json.dumps(warnings or [])
         metadata_json = json.dumps(metadata or {})
+        if session_id:
+            self.create_draft_session(session_id)
         with self.db.transaction() as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO uploaded_documents 
@@ -919,8 +933,8 @@ class Repository:
         """List uploaded documents, optionally filtered by session or active status."""
         query = "SELECT * FROM uploaded_documents WHERE 1=1"
         params: list[Any] = []
-        if session_id:
-            query += " AND (session_id=? OR session_id IS NULL)"
+        if session_id is not None:
+            query += " AND session_id=?"
             params.append(session_id)
         if is_active_only:
             query += " AND is_active=1"
@@ -933,6 +947,25 @@ class Repository:
             d["metadata"] = json.loads(d.get("metadata_json") or "{}")
             result.append(d)
         return result
+
+    def attach_documents_to_session(self, session_id: str, doc_ids: list[str]) -> None:
+        """Assign uploaded documents and chunks to a specific research session."""
+        if not doc_ids:
+            return
+        placeholders = ",".join(["?"] * len(doc_ids))
+        with self.db.transaction() as conn:
+            conn.execute(
+                f"UPDATE uploaded_documents SET session_id = ? WHERE id IN ({placeholders})",
+                (session_id, *doc_ids),
+            )
+            conn.execute(
+                f"UPDATE document_chunks SET session_id = ? WHERE document_id IN ({placeholders})",
+                (session_id, *doc_ids),
+            )
+            conn.execute(
+                f"UPDATE document_structured_extractions SET session_id = ? WHERE document_id IN ({placeholders})",
+                (session_id, *doc_ids),
+            )
 
     def update_document_status(
         self,
@@ -979,6 +1012,9 @@ class Repository:
         """Persist extracted document chunks and update FTS5 search index."""
         if not chunks:
             return
+        for ch in chunks:
+            if ch.get("session_id"):
+                self.create_draft_session(ch["session_id"])
         with self.db.transaction() as conn:
             for ch in chunks:
                 chunk_id = ch.get("id") or str(uuid.uuid4())
@@ -1086,6 +1122,8 @@ class Repository:
         session_id: str | None = None,
     ) -> None:
         """Persist structured intelligence extracted from an uploaded document."""
+        if session_id:
+            self.create_draft_session(session_id)
         rec_id = str(uuid.uuid4())
         with self.db.transaction() as conn:
             conn.execute(

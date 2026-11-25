@@ -1,10 +1,13 @@
-"""History page: Minimal ChatGPT-style session browser, loader, and manager."""
+"""History page: Minimal ChatGPT-style session browser, loader, and manager with live progress."""
 
 from __future__ import annotations
+
+import time
 
 import pandas as pd
 import streamlit as st
 
+from src.orchestration.background_runner import get_job_status, is_job_active
 from ui.components.common import (
     empty_state,
     format_datetime,
@@ -73,13 +76,13 @@ def render() -> None:
     # Apply status filter
     if status_filter == "Completed":
         filtered_sessions = [
-            s for s in filtered_sessions if (s.get("status") or "").lower() == "completed"
+            s for s in filtered_sessions if (s.get("status") or "").lower() == "completed" and not is_job_active(s["id"])
         ]
     elif status_filter == "In Progress":
         filtered_sessions = [
             s
             for s in filtered_sessions
-            if (s.get("status") or "").lower() in ("in_progress", "running", "started")
+            if is_job_active(s["id"]) or (s.get("status") or "").lower() in ("in_progress", "running", "started")
         ]
     elif status_filter == "Failed":
         filtered_sessions = [
@@ -109,7 +112,7 @@ def render() -> None:
             "Hackathon": s.get("hackathon_name") or "—",
             "Theme": s.get("hackathon_theme", ""),
             "Mode": "Multi-Track" if s.get("is_multi_track") else "Single Track",
-            "Status": (s.get("status") or "completed").upper(),
+            "Status": "IN PROGRESS" if is_job_active(s["id"]) else (s.get("status") or "completed").upper(),
             "Date": format_datetime(s.get("created_at")),
         }
         for s in filtered_sessions
@@ -117,14 +120,22 @@ def render() -> None:
     with st.expander("📊 Compact Table & Archive Overview", expanded=False):
         st.dataframe(pd.DataFrame(frame_data), use_container_width=True, hide_index=True)
 
+    has_running_job = False
+
     # Render each research session as ONE distinct card
     for s in filtered_sessions:
         sess_id = s["id"]
         theme = s.get("hackathon_theme") or "Untitled Theme"
         name = s.get("hackathon_name") or "Hackathon Challenge"
-        status = (s.get("status") or "completed").lower()
+        raw_status = (s.get("status") or "completed").lower()
         is_multi = bool(s.get("is_multi_track"))
         created_at_str = format_datetime(s.get("created_at"))
+
+        # Inspect live background runner status
+        live_job = get_job_status(sess_id)
+        is_running = bool(live_job and live_job.get("status") == "running") or raw_status in ("in_progress", "running", "started")
+        if is_running:
+            has_running_job = True
 
         # Determine tracks count
         track_count = 1
@@ -142,10 +153,10 @@ def render() -> None:
         )
 
         # Status badge styling
-        if status == "completed":
-            status_chip = "<span style='background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;'>COMPLETED</span>"
-        elif status in ("in_progress", "running", "started"):
+        if is_running:
             status_chip = "<span style='background: rgba(13, 148, 136, 0.15); color: #14b8a6; border: 1px solid rgba(13, 148, 136, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;'>IN PROGRESS</span>"
+        elif raw_status == "completed":
+            status_chip = "<span style='background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;'>COMPLETED</span>"
         else:
             status_chip = "<span style='background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;'>FAILED</span>"
 
@@ -176,7 +187,21 @@ def render() -> None:
                 unsafe_allow_html=True,
             )
 
-            if winner_title:
+            # Live Progress Display for Active Background Jobs
+            if is_running and live_job:
+                prog = float(live_job.get("progress", 0.1))
+                stage_name = live_job.get("stage", "Autonomous Execution")
+                msg = live_job.get("message", "Agents are conducting research...")
+                st.progress(min(max(prog, 0.0), 1.0))
+                st.markdown(
+                    f"<div style='font-size: 0.83rem; color: #14b8a6; margin-bottom: 10px;'>"
+                    f"<b>Current Stage:</b> <code>{stage_name}</code> &nbsp;·&nbsp; "
+                    f"<span style='color: #94a3b8;'>{msg}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            if not is_running and winner_title:
                 st.markdown(
                     f"<div style='margin-bottom: 12px; font-size: 0.86rem; color: #cbd5e1;'>"
                     f"<span style='color: #f59e0b; font-weight: 600;'>Top Selected Solution:</span> {winner_title}"
@@ -188,11 +213,14 @@ def render() -> None:
             col_load, col_dl, col_del, _ = st.columns([1.5, 1.8, 1.2, 3.5])
 
             with col_load:
-                btn_label = "View Progress →" if status in ("in_progress", "running", "started") else "Load Results →"
-                if st.button(btn_label, key=f"load_{sess_id}", type="primary", use_container_width=True):
-                    st.session_state["target_session_to_load"] = sess_id
-                    navigate_to("New Research")
-                    st.rerun()
+                if is_running:
+                    if st.button("🔄 Refresh", key=f"ref_{sess_id}", type="secondary", use_container_width=True):
+                        st.rerun()
+                else:
+                    if st.button("Load Results →", key=f"load_{sess_id}", type="primary", use_container_width=True):
+                        st.session_state["target_session_to_load"] = sess_id
+                        navigate_to("New Research")
+                        st.rerun()
 
             with col_dl:
                 if latest_report and latest_report.get("report_markdown"):
@@ -225,3 +253,16 @@ def render() -> None:
                             st.rerun()
 
             st.markdown("</div>", unsafe_allow_html=True)
+
+    # If any job is running in background, automatically poll/refresh every 3 seconds
+    if has_running_job:
+        st.markdown(
+            """
+            <div style="font-size: 0.78rem; color: #14b8a6; display: flex; align-items: center; gap: 6px; margin-top: 10px;">
+                <span style="animation: pulse 1.5s infinite;">●</span> Autonomous research agents active in background. Updating live...
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        time.sleep(3.0)
+        st.rerun()

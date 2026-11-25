@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -105,9 +106,8 @@ class DocumentIntelligenceService:
 
         # Duplicate detection by SHA-256
         existing = self.repository.get_uploaded_document_by_hash(file_hash)
-        if existing:
-            logger.info("Identical document already ingested: %s (hash: %s)", safe_name, file_hash[:8])
-            # Re-associate with current session if provided
+        if existing and (existing.get("session_id") == session_id or (session_id is None and existing.get("session_id") is None)):
+            logger.info("Identical document already ingested in this session: %s (hash: %s)", safe_name, file_hash[:8])
             doc = UploadedDocument(
                 id=existing["id"],
                 session_id=session_id or existing.get("session_id"),
@@ -124,6 +124,93 @@ class DocumentIntelligenceService:
                 is_active=bool(existing.get("is_active", 1)),
             )
             return doc
+        elif existing and session_id is not None and existing.get("session_id") is None:
+            self.repository.attach_documents_to_session(session_id, [existing["id"]])
+            doc = UploadedDocument(
+                id=existing["id"],
+                session_id=session_id,
+                filename=existing["filename"],
+                file_type=existing["file_type"],
+                file_size=existing["file_size"],
+                file_hash=existing["file_hash"],
+                document_type=DocumentType(existing["document_type"]),
+                page_count=existing["page_count"],
+                extraction_method=ExtractionMethod(existing["extraction_method"]),
+                status=ExtractionStatus(existing["status"]),
+                warnings=existing.get("warnings", []) + ["Document attached to session."],
+                metadata=existing.get("metadata", {}),
+                is_active=bool(existing.get("is_active", 1)),
+            )
+            return doc
+        elif existing and session_id is not None and existing.get("session_id") != session_id:
+            logger.info("Identical document exists in another session; cloning extraction for session %s", session_id[:8])
+            doc_id = str(uuid4())
+            stored_path = self.uploads_dir / f"{doc_id}_{safe_name}"
+            try:
+                stored_path.write_bytes(file_bytes)
+            except OSError as exc:
+                logger.warning("Could not persist file to disk: %s", exc)
+
+            self.repository.save_uploaded_document(
+                doc_id=doc_id,
+                filename=safe_name,
+                file_type=file_type,
+                file_size=len(file_bytes),
+                file_hash=file_hash,
+                document_type=existing.get("document_type", document_type.value),
+                page_count=existing.get("page_count", 1),
+                extraction_method=existing.get("extraction_method", ExtractionMethod.EMBEDDED_TEXT.value),
+                status=existing.get("status", ExtractionStatus.EXTRACTED.value),
+                session_id=session_id,
+                warnings=existing.get("warnings", []) + ["Document content reused verified extraction."],
+                metadata={"stored_path": str(stored_path)},
+            )
+            # Copy chunks to the new doc_id
+            old_chunks = self.repository.get_document_chunks(existing["id"])
+            if old_chunks:
+                cloned_chunks = [
+                    {
+                        "id": str(uuid4()),
+                        "document_id": doc_id,
+                        "session_id": session_id,
+                        "page_number": c["page_number"],
+                        "chunk_index": c["chunk_index"],
+                        "content_type": c.get("content_type", "text"),
+                        "text_content": c["text_content"],
+                        "tables": json.loads(c.get("tables_json") or "[]") if isinstance(c.get("tables_json"), str) else c.get("tables_json", []),
+                        "extraction_method": c.get("extraction_method", "embedded_text"),
+                        "confidence": c.get("confidence", 1.0),
+                    }
+                    for c in old_chunks
+                ]
+                self.repository.save_document_chunks(cloned_chunks)
+
+            # Copy structured extraction
+            old_struct = self.repository.get_document_structured_extraction(existing["id"])
+            if old_struct:
+                raw_json = old_struct.get("data_json") or json.dumps(old_struct.get("data", {}))
+                self.repository.save_document_structured_extraction(
+                    doc_id=doc_id,
+                    extraction_type=old_struct.get("extraction_type", "hackathon_profile"),
+                    data_json=raw_json,
+                    session_id=session_id,
+                )
+
+            return UploadedDocument(
+                id=doc_id,
+                session_id=session_id,
+                filename=safe_name,
+                file_type=file_type,
+                file_size=len(file_bytes),
+                file_hash=file_hash,
+                document_type=DocumentType(existing.get("document_type", document_type.value)),
+                page_count=existing.get("page_count", 1),
+                extraction_method=ExtractionMethod(existing.get("extraction_method", ExtractionMethod.EMBEDDED_TEXT.value)),
+                status=ExtractionStatus(existing.get("status", ExtractionStatus.EXTRACTED.value)),
+                warnings=existing.get("warnings", []) + ["Document content reused verified extraction."],
+                metadata={"stored_path": str(stored_path)},
+                is_active=True,
+            )
 
         doc_id = str(uuid4())
         stored_path = self.uploads_dir / f"{doc_id}_{safe_name}"
