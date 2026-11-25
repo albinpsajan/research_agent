@@ -99,7 +99,7 @@ with st.sidebar:
 
     # 3. ChatGPT-style Recent Sessions in Sidebar for Quick 1-Click Access
     repo = get_repository()
-    recent_sessions = repo.list_sessions(limit=8)
+    recent_sessions = repo.list_sessions(limit=12)
 
     if recent_sessions:
         st.markdown(
@@ -110,17 +110,23 @@ with st.sidebar:
             """,
             unsafe_allow_html=True,
         )
-        for s in recent_sessions[:6]:
+        seen_ids = set()
+        rendered_count = 0
+        for s in recent_sessions:
             s_id = s["id"]
+            if s_id in seen_ids:
+                continue
+            seen_ids.add(s_id)
+
             name = s.get("hackathon_name") or s.get("hackathon_theme") or "Untitled Session"
-            short_name = (name[:26] + "…") if len(name) > 26 else name
+            short_name = (name[:20] + "…") if len(name) > 20 else name
             is_active = (s_id == st.session_state.get("current_session_id"))
 
             col_btn, _ = st.columns([1, 0.01])
             with col_btn:
                 btn_type = "primary" if is_active else "secondary"
                 if st.button(
-                    f"◈ {short_name}",
+                    f"◈ {short_name} · {s_id[:6]}",
                     key=f"sb_sess_{s_id}",
                     type=btn_type,
                     use_container_width=True,
@@ -129,6 +135,10 @@ with st.sidebar:
                     st.session_state["target_session_to_load"] = s_id
                     st.session_state["target_nav"] = "New Research"
                     st.rerun()
+
+            rendered_count += 1
+            if rendered_count >= 6:
+                break
 
     st.divider()
 

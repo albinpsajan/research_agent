@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -128,17 +129,27 @@ class Repository:
     def delete_session(self, session_id: str) -> bool:
         """Cascade delete a research session and all associated child records."""
         with self.db._lock:
-            conn = self.db.get_connection()
-            conn.commit()
-            conn.execute("PRAGMA foreign_keys = OFF")
+            # Open a dedicated connection with foreign_keys disabled to guarantee
+            # that cross-session or orphaned references never block the session deletion.
+            conn = sqlite3.connect(
+                str(self.db.db_path),
+                timeout=15.0,
+                isolation_level=None,
+            )
             try:
+                conn.execute("PRAGMA foreign_keys = OFF")
                 with conn:
                     # Clean up FTS index for document chunks if present
                     try:
                         conn.execute(
                             """DELETE FROM document_chunks_fts 
-                               WHERE chunk_id IN (SELECT id FROM document_chunks WHERE session_id = ?)""",
-                            (session_id,),
+                               WHERE chunk_id IN (
+                                   SELECT id FROM document_chunks 
+                                   WHERE session_id = ? OR document_id IN (
+                                       SELECT id FROM uploaded_documents WHERE session_id = ?
+                                   )
+                               )""",
+                            (session_id, session_id),
                         )
                     except Exception:
                         pass
@@ -151,11 +162,18 @@ class Repository:
                         (session_id,),
                     )
                     conn.execute(
-                        "DELETE FROM document_structured_extractions WHERE session_id = ?",
-                        (session_id,),
+                        """DELETE FROM document_structured_extractions 
+                           WHERE session_id = ? OR document_id IN (
+                               SELECT id FROM uploaded_documents WHERE session_id = ?
+                           )""",
+                        (session_id, session_id),
                     )
                     conn.execute(
-                        "DELETE FROM document_chunks WHERE session_id = ?", (session_id,)
+                        """DELETE FROM document_chunks 
+                           WHERE session_id = ? OR document_id IN (
+                               SELECT id FROM uploaded_documents WHERE session_id = ?
+                           )""",
+                        (session_id, session_id),
                     )
                     conn.execute(
                         "DELETE FROM uploaded_documents WHERE session_id = ?",
@@ -189,11 +207,11 @@ class Repository:
                         "DELETE FROM research_sources WHERE session_id = ?", (session_id,)
                     )
                     cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-                    logger.info(f"Deleted research session {session_id[:8]} and all child records")
-                    return cur.rowcount > 0
+                    deleted = cur.rowcount > 0
+                    logger.info(f"Deleted research session {session_id[:8]} and all child records (found={deleted})")
+                    return deleted
             finally:
-                conn.commit()
-                conn.execute("PRAGMA foreign_keys = ON")
+                conn.close()
 
     # --- Agent Results ---
 

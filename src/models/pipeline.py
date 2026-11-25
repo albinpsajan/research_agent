@@ -105,7 +105,11 @@ class PipelineResult(BaseModel):
         if self.winner and self.winner.has_winner and self.winner.winner:
             return WinnerOutcome.WINNER_SELECTED
         # Only declare NO_QUALIFYING_WINNER if evaluation was actually conducted
-        if self.winner is not None or (self.report and self.report.has_winner is not None):
+        if (
+            self.status == "completed_no_winner"
+            or self.winner is not None
+            or (self.report and self.report.has_winner is not None)
+        ):
             return WinnerOutcome.NO_QUALIFYING_WINNER
         return WinnerOutcome.NOT_EVALUATED
 

@@ -143,6 +143,21 @@ MIGRATIONS: tuple[Migration, ...] = (
             ON candidate_solutions(session_id);
         """,
     ),
+    Migration(
+        6,
+        "Candidate solution backfill for historical integrity",
+        """
+        INSERT OR IGNORE INTO candidate_solutions (id, session_id, problem_statement, proposed_solution)
+        SELECT DISTINCT candidate_id, session_id, 'Historical problem statement', 'Historical candidate solution'
+        FROM evaluations
+        WHERE candidate_id IS NOT NULL AND candidate_id NOT IN (SELECT id FROM candidate_solutions);
+
+        INSERT OR IGNORE INTO candidate_solutions (id, session_id, problem_statement, proposed_solution)
+        SELECT DISTINCT candidate_id, session_id, 'Historical problem statement', 'Historical candidate solution'
+        FROM debate_history
+        WHERE candidate_id IS NOT NULL AND candidate_id NOT IN (SELECT id FROM candidate_solutions);
+        """,
+    ),
 )
 
 

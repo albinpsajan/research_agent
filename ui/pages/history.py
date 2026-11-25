@@ -275,7 +275,7 @@ def render() -> None:
                         st.session_state[del_confirm_key] = True
                         st.rerun()
 
-            # Inline full-width confirmation box when user requests deletion
+            # Inline confirmation box when user requests deletion
             if st.session_state.get(del_confirm_key, False):
                 st.markdown(
                     f"""
@@ -286,20 +286,28 @@ def render() -> None:
                     """,
                     unsafe_allow_html=True,
                 )
-                col_c1, col_c2, _ = st.columns([1.4, 1.4, 4.5])
+                col_c1, col_c2, _ = st.columns([1.5, 1.5, 4.0])
+                do_delete = False
                 with col_c1:
                     if st.button("Yes, Delete", key=f"del_yes_{sess_id}", type="primary", use_container_width=True):
-                        try:
-                            repo.delete_session(sess_id)
-                            st.session_state.pop(del_confirm_key, None)
-                            st.toast(f"Session {sess_id[:8]} deleted.")
-                            st.rerun()
-                        except Exception as del_err:
-                            st.error(f"Failed to delete session: {del_err}")
+                        do_delete = True
                 with col_c2:
                     if st.button("Cancel", key=f"del_no_{sess_id}", type="secondary", use_container_width=True):
                         st.session_state.pop(del_confirm_key, None)
                         st.rerun()
+
+                if do_delete:
+                    try:
+                        repo.delete_session(sess_id)
+                        st.session_state.pop(del_confirm_key, None)
+                        if st.session_state.get("research_session_id") == sess_id:
+                            st.session_state.pop("research_session_id", None)
+                        if st.session_state.get("target_session_to_load") == sess_id:
+                            st.session_state.pop("target_session_to_load", None)
+                        st.toast(f"Session {sess_id[:8]} deleted successfully.")
+                        st.rerun()
+                    except Exception as del_err:
+                        st.error(f"Failed to delete session: {del_err}")
 
             st.markdown("</div>", unsafe_allow_html=True)
 

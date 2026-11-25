@@ -7,7 +7,11 @@ import streamlit as st
 
 from src.models.hackathon import MultiTrackMode
 from src.models.multitrack import MultiTrackPipelineResult
-from src.models.pipeline import PipelineResult
+from src.models.pipeline import (
+    PipelineResult,
+    ResearchExecutionStatus,
+    WinnerOutcome,
+)
 from ui.components.common import (
     badge,
     empty_state,
@@ -65,8 +69,10 @@ def _render_single_track(result: PipelineResult) -> None:
     # -------------------------------------------------------------
     # SECTION A: EXECUTIVE SUMMARY (AT THE VERY TOP)
     # -------------------------------------------------------------
-    exec_status = result.execution_status
-    outcome = result.winner_outcome
+    exec_status = getattr(result, "execution_status", None) or ResearchExecutionStatus.COMPLETED
+    outcome = getattr(result, "winner_outcome", None) or (
+        WinnerOutcome.WINNER_SELECTED if has_winner else WinnerOutcome.NO_QUALIFYING_WINNER
+    )
 
     if exec_status == ResearchExecutionStatus.INTERRUPTED:
         st.markdown(
@@ -247,8 +253,10 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
     # -------------------------------------------------------------
     # SECTION A: EXECUTIVE SUMMARY (AT THE VERY TOP)
     # -------------------------------------------------------------
-    exec_status = multi.execution_status
-    outcome = multi.winner_outcome
+    exec_status = getattr(multi, "execution_status", None) or ResearchExecutionStatus.COMPLETED
+    outcome = getattr(multi, "winner_outcome", None) or (
+        WinnerOutcome.WINNER_SELECTED if multi.has_winner else WinnerOutcome.NO_QUALIFYING_WINNER
+    )
 
     if exec_status == ResearchExecutionStatus.INTERRUPTED:
         st.markdown(
@@ -334,18 +342,8 @@ def _render_multi_track(multi: MultiTrackPipelineResult) -> None:
                 unsafe_allow_html=True,
             )
         else:
-            st.markdown(
-                f"""
-                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
-                    <div style="color: #f59e0b; font-weight: 700; font-size: 1.05rem; margin-bottom: 4px;">
-                        Research completed. No candidate passed all mandatory quality requirements.
-                    </div>
-                    <div style="color: #cbd5e1; font-size: 0.88rem;">
-                        None of the candidate solutions across all {len(tracks)} tracks passed every mandatory qualification gate.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            st.error(
+                f"**Research completed. No overall winner declared.** None of the candidate solutions across all {len(tracks)} tracks passed every mandatory qualification gate."
             )
             st.caption(
                 "HackathonIQ maintains an honest standard across all evaluated tracks."
