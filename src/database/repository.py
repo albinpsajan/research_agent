@@ -128,54 +128,58 @@ class Repository:
     def delete_session(self, session_id: str) -> bool:
         """Cascade delete a research session and all associated child records."""
         with self.db.transaction() as conn:
-            conn.execute(
-                "DELETE FROM hackathon_tracks WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM multi_track_comparisons WHERE session_id = ?",
-                (session_id,),
-            )
-            conn.execute(
-                "DELETE FROM document_chunks WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM document_structured_extractions WHERE session_id = ?",
-                (session_id,),
-            )
-            conn.execute(
-                "UPDATE uploaded_documents SET session_id = NULL WHERE session_id = ?",
-                (session_id,),
-            )
-            conn.execute(
-                "DELETE FROM evaluations WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM debate_history WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM existing_solutions WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM candidate_solutions WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM problem_candidates WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM domain_discoveries WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM agent_results WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM final_reports WHERE session_id = ?", (session_id,)
-            )
-            conn.execute(
-                "DELETE FROM research_sources WHERE session_id = ?", (session_id,)
-            )
-            cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-            logger.info(f"Deleted research session {session_id[:8]} and all child records")
-            return cur.rowcount > 0
+            conn.execute("PRAGMA foreign_keys = OFF")
+            try:
+                conn.execute(
+                    "DELETE FROM hackathon_tracks WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM multi_track_comparisons WHERE session_id = ?",
+                    (session_id,),
+                )
+                conn.execute(
+                    "DELETE FROM document_chunks WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM document_structured_extractions WHERE session_id = ?",
+                    (session_id,),
+                )
+                conn.execute(
+                    "DELETE FROM uploaded_documents WHERE session_id = ?",
+                    (session_id,),
+                )
+                conn.execute(
+                    "DELETE FROM evaluations WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM debate_history WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM existing_solutions WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM candidate_solutions WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM problem_candidates WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM domain_discoveries WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM agent_results WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM final_reports WHERE session_id = ?", (session_id,)
+                )
+                conn.execute(
+                    "DELETE FROM research_sources WHERE session_id = ?", (session_id,)
+                )
+                cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+                logger.info(f"Deleted research session {session_id[:8]} and all child records")
+                return cur.rowcount > 0
+            finally:
+                conn.execute("PRAGMA foreign_keys = ON")
 
     # --- Agent Results ---
 
@@ -183,6 +187,7 @@ class Repository:
         self, session_id: str, agent_name: str, result_type: str, result_data: Any
     ) -> int:
         """Save an agent's result. Returns result ID."""
+        self.create_draft_session(session_id)
         data_json = (
             json.dumps(result_data) if not isinstance(result_data, str) else result_data
         )
@@ -804,6 +809,7 @@ class Repository:
 
     def save_tracks(self, session_id: str, tracks: list[Any]) -> None:
         """Save official hackathon tracks for a session."""
+        self.create_draft_session(session_id)
         with self.db.transaction() as conn:
             for t in tracks:
                 track_id = t.id if hasattr(t, "id") else t.get("id")
@@ -834,6 +840,7 @@ class Repository:
         comparison_data: Any,
     ) -> int:
         """Persist cross-track comparison and ranking result."""
+        self.create_draft_session(session_id)
         data_json = json.dumps(comparison_data) if not isinstance(comparison_data, str) else comparison_data
         with self.db.transaction() as conn:
             cursor = conn.execute(
@@ -952,6 +959,7 @@ class Repository:
         """Assign uploaded documents and chunks to a specific research session."""
         if not doc_ids:
             return
+        self.create_draft_session(session_id)
         placeholders = ",".join(["?"] * len(doc_ids))
         with self.db.transaction() as conn:
             conn.execute(

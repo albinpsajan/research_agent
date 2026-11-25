@@ -154,7 +154,8 @@ with st.sidebar:
 try:
     PAGES[choice]()
 except Exception as exc:  # noqa: BLE001
+    import traceback
+    traceback.print_exc()
     st.error(f"The page failed to render: {type(exc).__name__}: {exc}")
     with st.expander("Technical details"):
-        import traceback
         st.code(traceback.format_exc())

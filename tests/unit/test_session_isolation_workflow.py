@@ -385,3 +385,25 @@ def test_background_runner_lifecycle(test_repo: Repository) -> None:
         # Cannot re-launch while running
         re_launched = start_research_job(session_id, hackathon, options)
         assert re_launched is False
+
+
+def test_delete_session_with_shared_candidate_ids(test_repo: Repository) -> None:
+    """Verifies that delete_session handles cross-session shared candidate IDs without IntegrityError."""
+    s1 = f"s1_{uuid.uuid4().hex[:6]}"
+    s2 = f"s2_{uuid.uuid4().hex[:6]}"
+
+    test_repo.create_session(theme="Theme 1", session_id=s1)
+    test_repo.create_session(theme="Theme 2", session_id=s2)
+
+    # Save problem and candidate with shared ID 'C01'
+    with test_repo.db.transaction() as conn:
+        conn.execute("INSERT INTO problem_candidates (id, session_id, title, domain) VALUES ('P01', ?, 'Prob 1', 'Dom 1')", (s1,))
+        conn.execute("INSERT INTO candidate_solutions (id, session_id, problem_candidate_id, proposed_solution) VALUES ('C01', ?, 'P01', 'Sol 1')", (s1,))
+        conn.execute("INSERT INTO evaluations (session_id, candidate_id, total_score) VALUES (?, 'C01', 8.5)", (s2,))
+
+    # Deleting s1 must succeed cleanly without FOREIGN KEY constraint failed error
+    deleted = test_repo.delete_session(s1)
+    assert deleted is True
+    assert test_repo.get_session(s1) is None
+    # s2 still exists
+    assert test_repo.get_session(s2) is not None

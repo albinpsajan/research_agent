@@ -243,10 +243,13 @@ def render() -> None:
                     col_conf1, col_conf2 = st.columns(2)
                     with col_conf1:
                         if st.button("Confirm", key=f"del_yes_{sess_id}", type="primary", use_container_width=True):
-                            repo.delete_session(sess_id)
-                            st.session_state.pop(del_confirm_key, None)
-                            st.toast(f"Session {sess_id[:8]} deleted.")
-                            st.rerun()
+                            try:
+                                repo.delete_session(sess_id)
+                                st.session_state.pop(del_confirm_key, None)
+                                st.toast(f"Session {sess_id[:8]} deleted.")
+                                st.rerun()
+                            except Exception as del_err:
+                                st.error(f"Failed to delete session: {del_err}")
                     with col_conf2:
                         if st.button("Cancel", key=f"del_no_{sess_id}", use_container_width=True):
                             st.session_state.pop(del_confirm_key, None)
