@@ -127,58 +127,72 @@ class Repository:
 
     def delete_session(self, session_id: str) -> bool:
         """Cascade delete a research session and all associated child records."""
-        with self.db.transaction() as conn:
+        with self.db._lock:
+            conn = self.db.get_connection()
+            conn.commit()
             conn.execute("PRAGMA foreign_keys = OFF")
             try:
-                conn.execute(
-                    "DELETE FROM hackathon_tracks WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM multi_track_comparisons WHERE session_id = ?",
-                    (session_id,),
-                )
-                conn.execute(
-                    "DELETE FROM document_chunks WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM document_structured_extractions WHERE session_id = ?",
-                    (session_id,),
-                )
-                conn.execute(
-                    "DELETE FROM uploaded_documents WHERE session_id = ?",
-                    (session_id,),
-                )
-                conn.execute(
-                    "DELETE FROM evaluations WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM debate_history WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM existing_solutions WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM candidate_solutions WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM problem_candidates WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM domain_discoveries WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM agent_results WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM final_reports WHERE session_id = ?", (session_id,)
-                )
-                conn.execute(
-                    "DELETE FROM research_sources WHERE session_id = ?", (session_id,)
-                )
-                cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-                logger.info(f"Deleted research session {session_id[:8]} and all child records")
-                return cur.rowcount > 0
+                with conn:
+                    # Clean up FTS index for document chunks if present
+                    try:
+                        conn.execute(
+                            """DELETE FROM document_chunks_fts 
+                               WHERE chunk_id IN (SELECT id FROM document_chunks WHERE session_id = ?)""",
+                            (session_id,),
+                        )
+                    except Exception:
+                        pass
+
+                    conn.execute(
+                        "DELETE FROM hackathon_tracks WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM multi_track_comparisons WHERE session_id = ?",
+                        (session_id,),
+                    )
+                    conn.execute(
+                        "DELETE FROM document_structured_extractions WHERE session_id = ?",
+                        (session_id,),
+                    )
+                    conn.execute(
+                        "DELETE FROM document_chunks WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM uploaded_documents WHERE session_id = ?",
+                        (session_id,),
+                    )
+                    conn.execute(
+                        "DELETE FROM evaluations WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM debate_history WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM existing_solutions WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM candidate_solutions WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM problem_candidates WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM domain_discoveries WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM agent_results WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM final_reports WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM research_sources WHERE session_id = ?", (session_id,)
+                    )
+                    cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+                    logger.info(f"Deleted research session {session_id[:8]} and all child records")
+                    return cur.rowcount > 0
             finally:
+                conn.commit()
                 conn.execute("PRAGMA foreign_keys = ON")
 
     # --- Agent Results ---
@@ -812,8 +826,8 @@ class Repository:
         self.create_draft_session(session_id)
         with self.db.transaction() as conn:
             for t in tracks:
-                track_id = t.id if hasattr(t, "id") else t.get("id")
-                track_name = t.name if hasattr(t, "name") else t.get("name")
+                track_id = (t.id if hasattr(t, "id") else t.get("id")) or str(uuid.uuid4())
+                track_name = (t.name if hasattr(t, "name") else (t.get("name") or t.get("track_name"))) or "Track"
                 desc = t.description if hasattr(t, "description") else t.get("description")
                 rules = t.track_rules if hasattr(t, "track_rules") else t.get("track_rules")
                 url = t.official_track_url if hasattr(t, "official_track_url") else t.get("official_track_url")

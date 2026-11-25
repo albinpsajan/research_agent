@@ -136,15 +136,28 @@ def get_job_status(session_id: str, repository: Repository | None = None) -> dic
     if not session:
         return None
 
+    db_status = session.get("status") or "created"
+    # Auto-heal orphaned sessions from previous server runs
+    if db_status in ("running", "in_progress", "started"):
+        reports = repo.get_session_reports(session_id)
+        if reports:
+            db_status = "completed"
+        else:
+            db_status = "interrupted"
+        try:
+            repo.update_session_status(session_id, db_status)
+        except Exception:
+            pass
+
     return {
         "session_id": session_id,
         "theme": session.get("hackathon_theme") or "",
         "name": session.get("hackathon_name") or "Hackathon",
         "is_multi_track": bool(session.get("is_multi_track")),
-        "status": session.get("status") or "created",
-        "stage": "Completed" if session.get("status") == "completed" else "Idle",
-        "message": "",
-        "progress": 1.0 if session.get("status") == "completed" else 0.0,
+        "status": db_status,
+        "stage": "Completed" if db_status == "completed" else ("Interrupted" if db_status == "interrupted" else "Idle"),
+        "message": "" if db_status != "interrupted" else "Session interrupted during previous run",
+        "progress": 1.0 if db_status == "completed" else 0.0,
         "error": None,
     }
 

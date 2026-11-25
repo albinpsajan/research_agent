@@ -131,9 +131,9 @@ def render() -> None:
         is_multi = bool(s.get("is_multi_track"))
         created_at_str = format_datetime(s.get("created_at"))
 
-        # Inspect live background runner status
+        # Check if actually executing in background runner
         live_job = get_job_status(sess_id)
-        is_running = bool(live_job and live_job.get("status") == "running") or raw_status in ("in_progress", "running", "started")
+        is_running = is_job_active(sess_id)
         if is_running:
             has_running_job = True
 
@@ -155,8 +155,10 @@ def render() -> None:
         # Status badge styling
         if is_running:
             status_chip = "<span style='background: rgba(13, 148, 136, 0.15); color: #14b8a6; border: 1px solid rgba(13, 148, 136, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;'>IN PROGRESS</span>"
-        elif raw_status == "completed":
+        elif raw_status in ("completed", "completed_no_winner") or latest_report:
             status_chip = "<span style='background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;'>COMPLETED</span>"
+        elif raw_status in ("in_progress", "running", "started"):
+            status_chip = "<span style='background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;'>INTERRUPTED</span>"
         else:
             status_chip = "<span style='background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;'>FAILED</span>"
 
@@ -233,27 +235,38 @@ def render() -> None:
                         use_container_width=True,
                     )
 
+            del_confirm_key = f"confirm_delete_{sess_id}"
             with col_del:
-                del_confirm_key = f"confirm_delete_{sess_id}"
                 if not st.session_state.get(del_confirm_key, False):
                     if st.button("🗑 Delete", key=f"del_btn_{sess_id}", use_container_width=True):
                         st.session_state[del_confirm_key] = True
                         st.rerun()
-                else:
-                    col_conf1, col_conf2 = st.columns(2)
-                    with col_conf1:
-                        if st.button("Confirm", key=f"del_yes_{sess_id}", type="primary", use_container_width=True):
-                            try:
-                                repo.delete_session(sess_id)
-                                st.session_state.pop(del_confirm_key, None)
-                                st.toast(f"Session {sess_id[:8]} deleted.")
-                                st.rerun()
-                            except Exception as del_err:
-                                st.error(f"Failed to delete session: {del_err}")
-                    with col_conf2:
-                        if st.button("Cancel", key=f"del_no_{sess_id}", use_container_width=True):
+
+            # Inline full-width confirmation box when user requests deletion
+            if st.session_state.get(del_confirm_key, False):
+                st.markdown(
+                    f"""
+                    <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
+                        <span style="color: #ef4444; font-weight: 600;">Confirm Permanent Deletion:</span>
+                        <span style="color: #cbd5e1; font-size: 0.88rem;"> Are you sure you want to permanently delete <b>'{name or theme}'</b> ({sess_id[:8]})? This cannot be undone.</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                col_c1, col_c2, _ = st.columns([1.4, 1.4, 4.5])
+                with col_c1:
+                    if st.button("Yes, Delete", key=f"del_yes_{sess_id}", type="primary", use_container_width=True):
+                        try:
+                            repo.delete_session(sess_id)
                             st.session_state.pop(del_confirm_key, None)
+                            st.toast(f"Session {sess_id[:8]} deleted.")
                             st.rerun()
+                        except Exception as del_err:
+                            st.error(f"Failed to delete session: {del_err}")
+                with col_c2:
+                    if st.button("Cancel", key=f"del_no_{sess_id}", type="secondary", use_container_width=True):
+                        st.session_state.pop(del_confirm_key, None)
+                        st.rerun()
 
             st.markdown("</div>", unsafe_allow_html=True)
 
