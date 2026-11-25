@@ -127,7 +127,7 @@ with st.sidebar:
                 ):
                     # Load session into results and switch to New Research view
                     st.session_state["target_session_to_load"] = s_id
-                    st.session_state["nav_choice"] = "New Research"
+                    st.session_state["target_nav"] = "New Research"
                     st.rerun()
 
     st.divider()
